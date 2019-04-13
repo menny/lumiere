@@ -4,6 +4,8 @@
     <string name="giphy_api_key">nlpoOvleCgWUCfqCIGhHkZWpoand6uoo</string>
     <string name="loaded_image_content_description">loaded image</string>
     <string name="trending_list_title">Trending</string>
+    <string name="favorites_list_title">Favorites</string>
+    <string name="history_list_title">History</string>
     <string name="search_query_hint">What gif are you looking for?</string>
     <string name="search_results_title">Search results</string>
 </resources>
