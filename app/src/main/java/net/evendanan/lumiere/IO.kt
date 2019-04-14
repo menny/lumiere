@@ -2,20 +2,28 @@ package net.evendanan.lumiere
 
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
+import androidx.core.content.FileProvider
 import androidx.core.net.toFile
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.InputStream
-import java.io.OutputStream
+import java.io.*
 import java.net.URL
 
 
 interface IO {
+    val localStorageFolder: File
+    val appStorageFolder: File
     fun openUriForReading(uri: Uri): InputStream
     fun openUriForWriting(uri: Uri): OutputStream
+    fun asShareUri(uri: Uri): Uri
 }
 
 internal class IOAndroid(private val context: Context) : IO {
+    override val localStorageFolder = File(Environment.getExternalStorageDirectory(), "LumiereGifs")
+
+    override val appStorageFolder = File(context.filesDir, "media")
+
+    override fun asShareUri(uri: Uri): Uri = FileProvider.getUriForFile(context, context.packageName, uri.toFile())
+
     override fun openUriForWriting(uri: Uri): OutputStream {
         return when (uri.scheme) {
             "file" -> FileOutputStream(uri.toFile())

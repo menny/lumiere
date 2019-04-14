@@ -6,7 +6,6 @@ import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -107,15 +106,23 @@ class MainActivity : AppCompatActivity() {
 
         }
 
-        override fun notifyLocalMediaFile(file: File) {
+        override fun showShareWindow(shareUri: Uri) {
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                setDataAndType(shareUri, "image/*")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, getText(R.string.share_image)))
+        }
+
+        override fun notifyLocalMediaFile(file: File, shareUri: Uri) {
             sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
                 data = Uri.fromFile(file)
             })
 
             Snackbar.make(root_list, getString(R.string.local_file_available, file.absolutePath), Snackbar.LENGTH_LONG)
                 .setAction(R.string.show_downloaded_file_action) {
-                    startActivity(Intent(Intent.ACTION_VIEW, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
-                        setDataAndType(Uri.fromFile(file), "image/${file.extension}")
+                    startActivity(Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(shareUri, "image/*")
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     })

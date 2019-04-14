@@ -10,4 +10,5 @@
     <string name="search_results_title">Search results</string>
     <string name="local_file_available">GIF downloaded and available at %s</string>
     <string name="show_downloaded_file_action">Show</string>
+    <string name="share_image">Share</string>
 </resources>

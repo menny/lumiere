@@ -1,8 +1,6 @@
 package net.evendanan.lumiere
 
-import android.Manifest
 import android.net.Uri
-import android.os.Environment
 import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.*
@@ -72,7 +70,8 @@ interface PresenterUI {
     fun showProgress()
     fun hideProgress()
 
-    fun notifyLocalMediaFile(file: File)
+    fun notifyLocalMediaFile(file: File, shareUri: Uri)
+    fun showShareWindow(shareUri: Uri)
 }
 
 class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: PresenterUI, private val io: IO) :
@@ -111,7 +110,40 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
         Log.d("PresenterImpl", "onMediaActionClicked for ${media.original} with action $action")
         when (action) {
             ActionType.Save -> saveToLocalStorage(media)
+            ActionType.Share -> shareFromAppStorage(media)
             else -> TODO("Implement onMediaActionClicked for $action")
+        }
+    }
+
+    private fun downloadToAppStorage(media: Media): Uri {
+        io.appStorageFolder.apply {
+            if (isDirectory || mkdirs()) {
+                return copy(media.original, File(this@apply, media.filename).toUri())
+            } else {
+                throw IOException("Was not able to create folder ${this@apply}!")
+            }
+        }
+    }
+
+    private fun shareFromAppStorage(media: Media) {
+        downloadJob.cancel()
+
+        downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
+            Log.d("presenter", "Starting saving to disk")
+            ui.showProgress()
+
+            try {
+                withContext(Dispatchers.Default) {
+                    downloadToAppStorage(media).apply {
+                        ui.showShareWindow(io.asShareUri(this))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("presenter", "Failed to store ${media.original}. Error: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                ui.hideProgress()
+            }
         }
     }
 
@@ -119,36 +151,32 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
         downloadJob.cancel()
 
         downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
-            val permissionRequest = PermissionRequest(111, listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))
-            ui.askForPermission(permissionRequest)
-            if (withContext(Dispatchers.Default) { permissionRequest.waitForResponse() }) {
-                Log.d("presenter", "Starting saving to disk")
-                ui.showProgress()
+            Log.d("presenter", "Starting saving to disk")
+            ui.showProgress()
 
-                try {
-                    File(Environment.getExternalStorageDirectory(), "LumiereGifs").apply {
-                        withContext(Dispatchers.Default) {
-                            if (isDirectory || mkdirs()) {
-                                copy(media.original, File(this@apply, media.filename).toUri())
-                            } else {
-                                throw IOException("Was not able to create LumiereGifs folder!")
+            try {
+                withContext(Dispatchers.Default) {
+                    downloadToAppStorage(media).let { appFileUri ->
+                        io.localStorageFolder.let { localFileFile ->
+                            if (localFileFile.isDirectory || localFileFile.mkdirs()) {
+                                File(localFileFile, media.filename).let { targetFile ->
+                                    copy(appFileUri, targetFile.toUri())
+                                    ui.notifyLocalMediaFile(targetFile, appFileUri)
+                                }
                             }
                         }
-                        ui.notifyLocalMediaFile(this)
                     }
-                } catch (e: Exception) {
-                    Log.w("presenter", "Failed to store ${media.original}. Error: ${e.message}")
-                    e.printStackTrace()
-                } finally {
-                    ui.hideProgress()
                 }
-            } else {
-                Log.d("presenter", "User did not give permissions to store to disk")
+            } catch (e: Exception) {
+                Log.w("presenter", "Failed to store ${media.original}. Error: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                ui.hideProgress()
             }
         }
     }
 
-    private fun copy(inputUri: Uri, outputUri: Uri) {
+    private fun copy(inputUri: Uri, outputUri: Uri): Uri {
         Log.d("presenter-copy", "will copy from $inputUri to $outputUri...")
         io.openUriForReading(inputUri).use { receivedInputStream ->
             io.openUriForWriting(outputUri).use {
@@ -156,6 +184,8 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
             }
         }
         Log.d("presenter-copy", "done copy from $inputUri to $outputUri.")
+
+        return outputUri
     }
 
     override fun onQuery(query: String) {
