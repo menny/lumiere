@@ -8,4 +8,15 @@
                android:contentDescription="@string/loaded_image_content_description"
                android:scaleType="centerCrop"/>
 
+    <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                  android:orientation="horizontal" android:layout_margin="4dp"
+                  android:layout_gravity="bottom|end">
+        <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                   android:id="@+id/image_fav_action" android:src="@drawable/ic_media_fav_off" android:visibility="gone"/>
+        <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                   android:id="@+id/image_share_action" android:src="@drawable/ic_media_share"/>
+        <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                   android:id="@+id/image_save_action" android:src="@drawable/ic_media_save"/>
+    </LinearLayout>
+
 </FrameLayout>

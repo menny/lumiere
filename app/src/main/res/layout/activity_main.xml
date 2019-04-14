@@ -14,27 +14,12 @@
 
     </androidx.recyclerview.widget.RecyclerView>
 
-    <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
-                  android:orientation="horizontal"
-                  android:animateLayoutChanges="true"
-                  android:layout_gravity="bottom|end">
-
-        <EditText android:id="@+id/search_query" android:hint="@string/search_query_hint" android:layout_width="300dp"
-                  android:layout_height="wrap_content" android:minHeight="48dp"
-                  android:layout_gravity="center_vertical"
-                  android:imeOptions="actionSearch"
-                  android:lines="1"
-                  android:inputType="text"
-                  android:visibility="gone"/>
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/fab"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                app:srcCompat="@drawable/ic_action_search_fab"
-                android:layout_margin="@dimen/fab_margin"/>
-
-
-    </LinearLayout>
+    <!--<com.google.android.material.floatingactionbutton.FloatingActionButton-->
+    <!--android:id="@+id/fab"-->
+    <!--android:layout_width="wrap_content"-->
+    <!--android:layout_height="wrap_content"-->
+    <!--app:srcCompat="@drawable/ic_action_search_fab"-->
+    <!--android:layout_gravity="bottom|end"-->
+    <!--android:layout_margin="@dimen/fab_margin"/>-->
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
