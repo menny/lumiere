@@ -1,8 +1,12 @@
 package net.evendanan.lumiere
 
 import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -12,17 +16,22 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.CircularProgressDrawable
 import com.bumptech.glide.Glide
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.android.synthetic.main.activity_main.*
+import java.io.File
+
 
 private typealias ClickMediaActionNotify = (Media, ActionType) -> Unit
 private typealias QueryActionNotify = (query: String) -> Unit
 
 class MainActivity : AppCompatActivity() {
 
+    private var runningPermissionsRequest: PermissionRequest? = null
     private lateinit var presenter: Presenter
     private lateinit var loadingPlaceholder: Drawable
     private lateinit var loadingError: Drawable
@@ -45,7 +54,7 @@ class MainActivity : AppCompatActivity() {
         root_list.layoutManager = LinearLayoutManager(this, RecyclerView.VERTICAL, false)
 
         //presenter = PresenterImpl(GiphyMediaProvider(getString(R.string.giphy_api_key)), UiPresenterBridge())
-        presenter = PresenterImpl(FakeMediaProvider(), UiPresenterBridge())
+        presenter = PresenterImpl(FakeMediaProvider(), UiPresenterBridge(), IOAndroid(applicationContext))
     }
 
     override fun onStart() {
@@ -66,7 +75,54 @@ class MainActivity : AppCompatActivity() {
         presenter.onQuery(query)
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        runningPermissionsRequest?.let {
+            if (requestCode == it.requestId) {
+                runningPermissionsRequest = null
+                if (grantResults.all { grantValue -> grantValue == PERMISSION_GRANTED }) {
+                    it.onPermissionGranted()
+                } else {
+                    it.onPermissionDenied()
+                }
+            }
+        }
+    }
+
     inner class UiPresenterBridge : PresenterUI {
+        override fun askForPermission(permissionRequest: PermissionRequest) {
+            this@MainActivity.runningPermissionsRequest = permissionRequest
+            ActivityCompat.requestPermissions(
+                this@MainActivity,
+                permissionRequest.permissions.toTypedArray(),
+                permissionRequest.requestId
+            )
+        }
+
+        override fun showProgress() {
+
+        }
+
+        override fun hideProgress() {
+
+        }
+
+        override fun notifyLocalMediaFile(file: File) {
+            sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
+                data = Uri.fromFile(file)
+            })
+
+            Snackbar.make(root_list, getString(R.string.local_file_available, file.absolutePath), Snackbar.LENGTH_LONG)
+                .setAction(R.string.show_downloaded_file_action) {
+                    startActivity(Intent(Intent.ACTION_VIEW, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+                        setDataAndType(Uri.fromFile(file), "image/${file.extension}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    })
+                }
+                .show()
+        }
+
         override fun focusOnSection(providerType: ProviderType) {
             root_list.scrollToPosition(providerType.ordinal + 1)
         }

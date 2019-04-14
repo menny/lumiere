@@ -1,8 +1,15 @@
 package net.evendanan.lumiere
 
+import android.Manifest
+import android.net.Uri
+import android.os.Environment
 import android.util.Log
+import androidx.core.net.toUri
 import kotlinx.coroutines.*
 import kotlinx.coroutines.android.Main
+import java.io.File
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
 
 interface Presenter {
     fun onUiVisible()
@@ -35,12 +42,41 @@ interface ItemsProvider {
     fun setOnItemsAvailableListener(listener: (List<Media>) -> Unit)
 }
 
+class PermissionRequest(val requestId: Int, val permissions: List<String>) {
+
+    private val latch = CountDownLatch(1)
+    private var granted = false
+
+    fun onPermissionGranted() {
+        granted = true
+        latch.countDown()
+    }
+
+    fun onPermissionDenied() {
+        granted = false
+        latch.countDown()
+    }
+
+    fun waitForResponse(): Boolean {
+        latch.await()
+        return granted
+    }
+}
+
 interface PresenterUI {
     fun setItemsProviders(providers: List<ItemsProvider>)
     fun focusOnSection(providerType: ProviderType)
+
+    fun askForPermission(permissionRequest: PermissionRequest)
+
+    fun showProgress()
+    fun hideProgress()
+
+    fun notifyLocalMediaFile(file: File)
 }
 
-class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: PresenterUI) : Presenter {
+class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: PresenterUI, private val io: IO) :
+    Presenter {
     private val availableProviders =
         mutableMapOf(
             ProviderType.Trending to ItemsProviderImpl(ProviderType.Trending, false),
@@ -49,6 +85,7 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
 
     private var viewModelJob = Job()
     private var searchJob = Job()
+    private var downloadJob = Job()
     private val uiScope = CoroutineScope(Dispatchers.Main)
 
     init {
@@ -72,6 +109,53 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
 
     override fun onMediaActionClicked(media: Media, action: ActionType) {
         Log.d("PresenterImpl", "onMediaActionClicked for ${media.original} with action $action")
+        when (action) {
+            ActionType.Save -> saveToLocalStorage(media)
+            else -> TODO("Implement onMediaActionClicked for $action")
+        }
+    }
+
+    private fun saveToLocalStorage(media: Media) {
+        downloadJob.cancel()
+
+        downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
+            val permissionRequest = PermissionRequest(111, listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))
+            ui.askForPermission(permissionRequest)
+            if (withContext(Dispatchers.Default) { permissionRequest.waitForResponse() }) {
+                Log.d("presenter", "Starting saving to disk")
+                ui.showProgress()
+
+                try {
+                    File(Environment.getExternalStorageDirectory(), "LumiereGifs").apply {
+                        withContext(Dispatchers.Default) {
+                            if (isDirectory || mkdirs()) {
+                                copy(media.original, File(this@apply, media.filename).toUri())
+                            } else {
+                                throw IOException("Was not able to create LumiereGifs folder!")
+                            }
+                        }
+                        ui.notifyLocalMediaFile(this)
+                    }
+                } catch (e: Exception) {
+                    Log.w("presenter", "Failed to store ${media.original}. Error: ${e.message}")
+                    e.printStackTrace()
+                } finally {
+                    ui.hideProgress()
+                }
+            } else {
+                Log.d("presenter", "User did not give permissions to store to disk")
+            }
+        }
+    }
+
+    private fun copy(inputUri: Uri, outputUri: Uri) {
+        Log.d("presenter-copy", "will copy from $inputUri to $outputUri...")
+        io.openUriForReading(inputUri).use { receivedInputStream ->
+            io.openUriForWriting(outputUri).use {
+                receivedInputStream.copyTo(it)
+            }
+        }
+        Log.d("presenter-copy", "done copy from $inputUri to $outputUri.")
     }
 
     override fun onQuery(query: String) {
@@ -95,6 +179,7 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
     override fun destroy() {
         viewModelJob.cancel()
         searchJob.cancel()
+        downloadJob.cancel()
     }
 }
 
