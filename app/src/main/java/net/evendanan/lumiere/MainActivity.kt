@@ -18,10 +18,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import androidx.swiperefreshlayout.widget.CircularProgressDrawable
+import com.anysoftkeyboard.api.MediaInsertion
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.request.transition.DrawableCrossFadeFactory
+import com.bumptech.glide.request.transition.TransitionFactory
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.android.synthetic.main.activity_main.*
+import pl.droidsonroids.gif.GifDrawableBuilder
 import java.io.File
 
 
@@ -32,6 +36,7 @@ class MainActivity : AppCompatActivity() {
 
     private var runningPermissionsRequest: PermissionRequest? = null
     private lateinit var presenter: Presenter
+    private lateinit var transitionGlideFactory: TransitionFactory<Drawable>
     private lateinit var loadingPlaceholder: Drawable
     private lateinit var loadingError: Drawable
 
@@ -41,19 +46,25 @@ class MainActivity : AppCompatActivity() {
 
         //fab.setOnClickListener { presenter.onFabClicked() }
 
-        loadingPlaceholder = CircularProgressDrawable(this).apply {
-            centerRadius = resources.getDimension(R.dimen.loading_radius)
-            strokeWidth = resources.getDimension(R.dimen.loading_stroke_wide)
-            start()
-        }
+        transitionGlideFactory = DrawableCrossFadeFactory.Builder().setCrossFadeEnabled(true).build()
+//        loadingPlaceholder = CircularProgressDrawable(this).apply {
+//            centerRadius = resources.getDimension(R.dimen.loading_radius)
+//            strokeWidth = resources.getDimension(R.dimen.loading_stroke_wide)
+//            start()
+//        }
+        loadingPlaceholder = GifDrawableBuilder().from(resources.openRawResource(R.raw.loading_gif)).build()
         loadingError = getDrawable(R.drawable.ic_error_loading)!!
 
         root_list.adapter =
             SectionsAdapter(this, loadingPlaceholder, loadingError, this::onMediaItemClicked, this::onQuery)
         root_list.layoutManager = LinearLayoutManager(this, RecyclerView.VERTICAL, false)
 
-        //presenter = PresenterImpl(GiphyMediaProvider(getString(R.string.giphy_api_key)), UiPresenterBridge())
-        presenter = PresenterImpl(FakeMediaProvider(), UiPresenterBridge(), IOAndroid(applicationContext))
+        presenter = PresenterImpl(
+            intent?.extras?.containsKey(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_REQUEST_ID_KEY) ?: false,
+            GiphyMediaProvider(getString(R.string.giphy_api_key)),
+            UiPresenterBridge(),
+            IOAndroid(applicationContext)
+        )
     }
 
     override fun onStart() {
@@ -89,6 +100,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     inner class UiPresenterBridge : PresenterUI {
+        override fun shareToAnySoftKeyboard(shareUri: Uri) {
+            val intent = Intent(MediaInsertion.BROADCAST_INTENT_MEDIA_INSERTION_AVAILABLE_ACTION)
+            intent.putExtra(
+                MediaInsertion.BROADCAST_INTENT_MEDIA_INSERTION_REQUEST_ID_KEY,
+                this@MainActivity.intent?.extras?.getInt(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_REQUEST_ID_KEY)
+                    ?: 0
+            )
+            intent.putExtra(
+                MediaInsertion.BROADCAST_INTENT_MEDIA_INSERTION_MEDIA_MIMES_KEY,
+                this@MainActivity.intent?.extras?.getStringArray(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_MIMES_KEY)
+                    ?: emptyArray<String>()
+            )
+            intent.putExtra(MediaInsertion.BROADCAST_INTENT_MEDIA_INSERTION_MEDIA_URI_KEY, shareUri)
+
+            sendBroadcast(intent)
+            finish()
+        }
+
         override fun askForPermission(permissionRequest: PermissionRequest) {
             this@MainActivity.runningPermissionsRequest = permissionRequest
             ActivityCompat.requestPermissions(
@@ -200,7 +229,12 @@ private class SectionsAdapter(
                     ProviderType.Search -> activity.getText(R.string.search_results_title)
                 }
 
-                setOnItemsAvailableListener((holder.recyclerView.adapter as MediaItemsAdapter)::setItems)
+                setOnItemsAvailableListener { items ->
+                    (holder.recyclerView.adapter as MediaItemsAdapter).setItems(
+                        this,
+                        items
+                    )
+                }
                 holder.queryBox.apply {
                     visibility = if (hasQuery) View.VISIBLE else View.GONE
                     setOnEditorActionListener { _, actionId, _ ->
@@ -244,6 +278,7 @@ private class MediaItemsAdapter(
 ) :
     RecyclerView.Adapter<MediaItemViewHolder>() {
 
+    private lateinit var provider: ItemsProvider
     private val layoutInflater = LayoutInflater.from(activity)
     private var items = emptyList<Media>()
 
@@ -258,9 +293,10 @@ private class MediaItemsAdapter(
 
     override fun getItemId(position: Int): Long = items[position].original.hashCode().toLong()
 
-    fun setItems(newItems: List<Media>) {
-        newItems.forEach { Log.d("MediaItemsAdapter", "item: ${it.original}") }
+    fun setItems(newProvider: ItemsProvider, newItems: List<Media>) {
+        newItems.forEach { Log.d("MediaItemsAdapter", "item: ${it.original} for ${provider.type}") }
         items = newItems
+        provider = newProvider
         notifyDataSetChanged()
     }
 
@@ -271,21 +307,33 @@ private class MediaItemsAdapter(
             holder.media = it
             Glide.with(activity)
                 .load(it.preview)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .placeholder(placeholder)
                 .error(error)
                 .into(holder.image)
+
+            provider.supportedActions.apply {
+                holder.favActionView.visibleIfSupported(ActionType.Favorite)
+                holder.saveActionView.visibleIfSupported(ActionType.Save)
+                holder.shareActionView.visibleIfSupported(ActionType.Share)
+                holder.image.isClickable = provider.supportedActions.contains(ActionType.Main)
+            }
         }
     }
 
+    private fun View.visibleIfSupported(actionType: ActionType) {
+        visibility = if (provider.supportedActions.contains(actionType))
+            View.VISIBLE else View.GONE
+    }
 }
 
 class MediaItemViewHolder(view: View, private val clickNotifier: ClickMediaActionNotify) :
     RecyclerView.ViewHolder(view) {
     var media: Media? = null
     val image: ImageView = view.findViewById(R.id.image_view)
-    private val saveActionView: View = view.findViewById(R.id.image_save_action)
-    private val favActionView: View = view.findViewById(R.id.image_fav_action)
-    private val shareActionView: View = view.findViewById(R.id.image_share_action)
+    val saveActionView: View = view.findViewById(R.id.image_save_action)
+    val favActionView: View = view.findViewById(R.id.image_fav_action)
+    val shareActionView: View = view.findViewById(R.id.image_share_action)
 
     init {
         image.setOnClickListener(this::onViewClicked)

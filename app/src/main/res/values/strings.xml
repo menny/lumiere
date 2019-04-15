@@ -7,8 +7,9 @@
     <string name="favorites_list_title">Favorites</string>
     <string name="history_list_title">History</string>
     <string name="search_query_hint">What gif are you looking for?</string>
-    <string name="search_results_title">Search results</string>
+    <string name="search_results_title">Search</string>
     <string name="local_file_available">GIF downloaded and available at %s</string>
     <string name="show_downloaded_file_action">Show</string>
     <string name="share_image">Share</string>
+    <string name="app_title">Lumiere</string>
 </resources>

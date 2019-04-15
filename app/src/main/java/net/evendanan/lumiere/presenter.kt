@@ -35,6 +35,7 @@ enum class ProviderType {
 }
 
 interface ItemsProvider {
+    val supportedActions: Set<ActionType>
     val type: ProviderType
     val hasQuery: Boolean
     fun setOnItemsAvailableListener(listener: (List<Media>) -> Unit)
@@ -72,15 +73,17 @@ interface PresenterUI {
 
     fun notifyLocalMediaFile(file: File, shareUri: Uri)
     fun showShareWindow(shareUri: Uri)
+    fun shareToAnySoftKeyboard(shareUri: Uri)
 }
 
-class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: PresenterUI, private val io: IO) :
+class PresenterImpl(
+    private val pickerMode: Boolean,
+    private val mediaProvider: MediaProvider,
+    private val ui: PresenterUI,
+    private val io: IO
+) :
     Presenter {
-    private val availableProviders =
-        mutableMapOf(
-            ProviderType.Trending to ItemsProviderImpl(ProviderType.Trending, false),
-            ProviderType.Search to ItemsProviderImpl(ProviderType.Search, true)
-        )
+    private val availableProviders: MutableMap<ProviderType, ItemsProviderImpl>
 
     private var viewModelJob = Job()
     private var searchJob = Job()
@@ -88,6 +91,12 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
     private val uiScope = CoroutineScope(Dispatchers.Main)
 
     init {
+        val actions = if (pickerMode) setOf(ActionType.Main) else setOf(ActionType.Share, ActionType.Save)
+        availableProviders = mutableMapOf(
+            ProviderType.Trending to ItemsProviderImpl(ProviderType.Trending, false, actions),
+            ProviderType.Search to ItemsProviderImpl(ProviderType.Search, true, actions)
+        )
+
         ui.setItemsProviders(availableProviders.values.toSortedCollection())
     }
 
@@ -111,6 +120,7 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
         when (action) {
             ActionType.Save -> saveToLocalStorage(media)
             ActionType.Share -> shareFromAppStorage(media)
+            ActionType.Main -> clickOnImage(media)
             else -> TODO("Implement onMediaActionClicked for $action")
         }
     }
@@ -122,6 +132,35 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
             } else {
                 throw IOException("Was not able to create folder ${this@apply}!")
             }
+        }
+    }
+
+    private fun clickOnImage(media: Media) {
+        if (pickerMode) {
+            downloadJob.cancel()
+
+            downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
+                Log.d("presenter", "Starting saving to disk")
+                ui.showProgress()
+
+                try {
+                    withContext(Dispatchers.Default) {
+                        downloadToAppStorage(media).apply {
+                            io.asShareUri(this).let { uriForAnySoftKeyboard ->
+                                io.grantUriReadAccess(uriForAnySoftKeyboard, "com.menny.android.anysoftkeyboard")
+                                ui.shareToAnySoftKeyboard(uriForAnySoftKeyboard)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("presenter", "Failed to store ${media.original}. Error: ${e.message}")
+                    e.printStackTrace()
+                } finally {
+                    ui.hideProgress()
+                }
+            }
+        } else {
+            shareFromAppStorage(media)
         }
     }
 
@@ -213,7 +252,10 @@ class PresenterImpl(private val mediaProvider: MediaProvider, private val ui: Pr
     }
 }
 
-private class ItemsProviderImpl(override val type: ProviderType, override val hasQuery: Boolean) : ItemsProvider {
+private class ItemsProviderImpl(
+    override val type: ProviderType, override val hasQuery: Boolean,
+    override val supportedActions: Set<ActionType>
+) : ItemsProvider {
     private var items = emptyList<Media>()
     private var listener: ((List<Media>) -> Unit) = this::noOpListener
 

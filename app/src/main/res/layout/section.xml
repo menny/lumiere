@@ -20,7 +20,7 @@
         <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/section_list"
                 android:layout_width="match_parent"
-                android:layout_height="120dp"
+                android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"/>
 
         <EditText android:id="@+id/search_query" android:hint="@string/search_query_hint"
