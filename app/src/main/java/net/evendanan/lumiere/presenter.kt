@@ -10,12 +10,14 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 
 interface Presenter {
+    fun onSearchIconClicked()
+
     fun onUiVisible()
     fun onUiGone()
 
     fun onMediaActionClicked(media: Media, action: ActionType)
 
-    fun onQuery(query: String)
+    fun onQuery(query: String, providerType: ProviderType)
 
     fun destroy()
 }
@@ -90,14 +92,21 @@ class PresenterImpl(
     private var downloadJob = Job()
     private val uiScope = CoroutineScope(Dispatchers.Main)
 
+    private val defaultActions = if (pickerMode) setOf(ActionType.Main) else setOf(ActionType.Share, ActionType.Save)
+
     init {
-        val actions = if (pickerMode) setOf(ActionType.Main) else setOf(ActionType.Share, ActionType.Save)
         availableProviders = mutableMapOf(
-            ProviderType.Trending to ItemsProviderImpl(ProviderType.Trending, false, actions),
-            ProviderType.Search to ItemsProviderImpl(ProviderType.Search, true, actions)
+            ProviderType.Trending to ItemsProviderImpl(ProviderType.Trending, false, defaultActions)
         )
 
+        if (pickerMode) {
+            availableProviders[ProviderType.Search] = ItemsProviderImpl(ProviderType.Search, true, defaultActions)
+        }
+
         ui.setItemsProviders(availableProviders.values.toSortedCollection())
+        if (pickerMode) {
+            ui.focusOnSection(ProviderType.Search)
+        }
     }
 
     override fun onUiVisible() {
@@ -227,7 +236,17 @@ class PresenterImpl(
         return outputUri
     }
 
-    override fun onQuery(query: String) {
+    override fun onSearchIconClicked() {
+        availableProviders[ProviderType.Search].let {
+            if (it == null) {
+                availableProviders[ProviderType.Search] = ItemsProviderImpl(ProviderType.Search, true, defaultActions)
+                ui.setItemsProviders(availableProviders.values.toSortedCollection())
+                ui.focusOnSection(ProviderType.Search)
+            }
+        }
+    }
+
+    override fun onQuery(query: String, providerType: ProviderType) {
         searchJob.cancel()
 
         //consider putting a local-loading GIF image here.

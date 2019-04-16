@@ -1,6 +1,7 @@
 package net.evendanan.lumiere
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.graphics.drawable.Drawable
@@ -11,6 +12,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
@@ -30,7 +32,7 @@ import java.io.File
 
 
 private typealias ClickMediaActionNotify = (Media, ActionType) -> Unit
-private typealias QueryActionNotify = (query: String) -> Unit
+private typealias QueryActionNotify = (query: String, ProviderType) -> Unit
 
 class MainActivity : AppCompatActivity() {
 
@@ -44,14 +46,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        //fab.setOnClickListener { presenter.onFabClicked() }
+        fab.setOnClickListener { presenter.onSearchIconClicked(); fab.hide() }
 
         transitionGlideFactory = DrawableCrossFadeFactory.Builder().setCrossFadeEnabled(true).build()
-//        loadingPlaceholder = CircularProgressDrawable(this).apply {
-//            centerRadius = resources.getDimension(R.dimen.loading_radius)
-//            strokeWidth = resources.getDimension(R.dimen.loading_stroke_wide)
-//            start()
-//        }
         loadingPlaceholder = GifDrawableBuilder().from(resources.openRawResource(R.raw.loading_gif)).build()
         loadingError = getDrawable(R.drawable.ic_error_loading)!!
 
@@ -81,8 +78,8 @@ class MainActivity : AppCompatActivity() {
         presenter.onMediaActionClicked(media, actionType)
     }
 
-    private fun onQuery(query: String) {
-        presenter.onQuery(query)
+    private fun onQuery(query: String, providerType: ProviderType) {
+        presenter.onQuery(query, providerType)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -160,7 +157,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun focusOnSection(providerType: ProviderType) {
-            root_list.scrollToPosition(providerType.ordinal + 1)
+            (providerType.ordinal + 1).let { itemPosition ->
+                root_list.postDelayed({
+                    root_list.scrollToPosition(itemPosition)
+                    root_list.adapter?.notifyItemChanged(itemPosition, Payloads.FocusEditText)
+                }, 60)
+            }
         }
 
         override fun setItemsProviders(providers: List<ItemsProvider>) {
@@ -168,6 +170,10 @@ class MainActivity : AppCompatActivity() {
             (root_list.adapter as SectionsAdapter).setItemsProviders(providers)
         }
     }
+}
+
+sealed class Payloads {
+    object FocusEditText : Payloads()
 }
 
 private class SectionsAdapter(
@@ -213,11 +219,7 @@ private class SectionsAdapter(
 
     override fun getItemCount() = 2 + itemsProviders.size
 
-    override fun getItemId(position: Int): Long = when (position) {
-        0 -> APP_SECTION_TYPE.toLong()
-        itemsProviders.size + 1 -> SPACER_SECTION_TYPE.toLong()
-        else -> itemsProviders[position - 1].type.ordinal.toLong()
-    }
+    override fun getItemId(position: Int): Long = position.toLong()
 
     override fun onBindViewHolder(holder: SectionViewHolder, position: Int) {
         if (holder is SectionViewHolder.MediaSectionViewHolder) {
@@ -240,10 +242,28 @@ private class SectionsAdapter(
                     setOnEditorActionListener { _, actionId, _ ->
                         when (actionId) {
                             EditorInfo.IME_ACTION_SEARCH -> {
-                                queryNotify(text.toString()); true
+                                queryNotify(text.toString(), (this@run).type); true
                             }
                             else -> false
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onBindViewHolder(holder: SectionViewHolder, position: Int, payloads: MutableList<Any>) {
+        super.onBindViewHolder(holder, position, payloads)
+        if (holder is SectionViewHolder.MediaSectionViewHolder) {
+            itemsProviders[position - 1].run {
+                holder.queryBox.apply {
+                    if (hasQuery && payloads.contains(Payloads.FocusEditText)) {
+                        postDelayed({
+                            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                                .toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+                            requestFocusFromTouch()
+                        }, 60)
+
                     }
                 }
             }
@@ -294,7 +314,7 @@ private class MediaItemsAdapter(
     override fun getItemId(position: Int): Long = items[position].original.hashCode().toLong()
 
     fun setItems(newProvider: ItemsProvider, newItems: List<Media>) {
-        newItems.forEach { Log.d("MediaItemsAdapter", "item: ${it.original} for ${provider.type}") }
+        newItems.forEach { Log.d("MediaItemsAdapter", "item: ${it.original} for ${newProvider.type}") }
         items = newItems
         provider = newProvider
         notifyDataSetChanged()
