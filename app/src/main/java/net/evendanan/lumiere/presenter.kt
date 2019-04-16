@@ -1,5 +1,6 @@
 package net.evendanan.lumiere
 
+import android.Manifest
 import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
@@ -70,6 +71,8 @@ interface PresenterUI {
 
     fun askForPermission(permissionRequest: PermissionRequest)
 
+    fun fabVisibility(visible: Boolean)
+
     fun showProgress()
     fun hideProgress()
 
@@ -100,23 +103,20 @@ class PresenterImpl(
         )
 
         if (pickerMode) {
-            availableProviders[ProviderType.Search] = ItemsProviderImpl(ProviderType.Search, true, defaultActions)
+            onSearchIconClicked()
+        } else {
+            ui.setItemsProviders(availableProviders.values.toSortedCollection())
         }
 
-        ui.setItemsProviders(availableProviders.values.toSortedCollection())
-        if (pickerMode) {
-            ui.focusOnSection(ProviderType.Search)
-        }
-    }
-
-    override fun onUiVisible() {
-        viewModelJob.cancel()
         viewModelJob = uiScope.launch(Dispatchers.Main.immediate) {
             val trending = withContext(Dispatchers.Default) {
                 mediaProvider.blockingTrending()
             }
             availableProviders[ProviderType.Trending]?.setItems(trending)
         }
+    }
+
+    override fun onUiVisible() {
     }
 
     override fun onUiGone() {
@@ -199,27 +199,33 @@ class PresenterImpl(
         downloadJob.cancel()
 
         downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
-            Log.d("presenter", "Starting saving to disk")
-            ui.showProgress()
+            val havePermission = PermissionRequest(123, listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)).run {
+                ui.askForPermission(this)
+                return@run waitForResponse()
+            }
+            if (havePermission) {
+                Log.d("presenter", "Starting saving to disk")
+                ui.showProgress()
 
-            try {
-                withContext(Dispatchers.Default) {
-                    downloadToAppStorage(media).let { appFileUri ->
-                        io.localStorageFolder.let { localFileFile ->
-                            if (localFileFile.isDirectory || localFileFile.mkdirs()) {
-                                File(localFileFile, media.filename).let { targetFile ->
-                                    copy(appFileUri, targetFile.toUri())
-                                    ui.notifyLocalMediaFile(targetFile, appFileUri)
+                try {
+                    withContext(Dispatchers.Default) {
+                        downloadToAppStorage(media).let { appFileUri ->
+                            io.localStorageFolder.let { localFileFile ->
+                                if (localFileFile.isDirectory || localFileFile.mkdirs()) {
+                                    File(localFileFile, media.filename).let { targetFile ->
+                                        copy(appFileUri, targetFile.toUri())
+                                        ui.notifyLocalMediaFile(targetFile, appFileUri)
+                                    }
                                 }
                             }
                         }
                     }
+                } catch (e: Exception) {
+                    Log.w("presenter", "Failed to store ${media.original}. Error: ${e.message}")
+                    e.printStackTrace()
+                } finally {
+                    ui.hideProgress()
                 }
-            } catch (e: Exception) {
-                Log.w("presenter", "Failed to store ${media.original}. Error: ${e.message}")
-                e.printStackTrace()
-            } finally {
-                ui.hideProgress()
             }
         }
     }
@@ -239,6 +245,7 @@ class PresenterImpl(
     override fun onSearchIconClicked() {
         availableProviders[ProviderType.Search].let {
             if (it == null) {
+                ui.fabVisibility(false)
                 availableProviders[ProviderType.Search] = ItemsProviderImpl(ProviderType.Search, true, defaultActions)
                 ui.setItemsProviders(availableProviders.values.toSortedCollection())
                 ui.focusOnSection(ProviderType.Search)

@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        fab.setOnClickListener { presenter.onSearchIconClicked(); fab.hide() }
+        fab.setOnClickListener { presenter.onSearchIconClicked() }
 
         transitionGlideFactory = DrawableCrossFadeFactory.Builder().setCrossFadeEnabled(true).build()
         loadingPlaceholder = GifDrawableBuilder().from(resources.openRawResource(R.raw.loading_gif)).build()
@@ -113,6 +113,14 @@ class MainActivity : AppCompatActivity() {
 
             sendBroadcast(intent)
             finish()
+        }
+
+        override fun fabVisibility(visible: Boolean) {
+            if (visible) {
+                fab.show()
+            } else {
+                fab.hide()
+            }
         }
 
         override fun askForPermission(permissionRequest: PermissionRequest) {
