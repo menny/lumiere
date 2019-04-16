@@ -5,7 +5,7 @@
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
               android:layout_gravity="center"
               android:gravity="center"
-              android:drawableEnd="@drawable/powered_by_giphy_white_background"
+              android:drawableEnd="@drawable/powered_by_giphy"
               android:layout_margin="8dp"
               android:textAppearance="@style/TextAppearance.AppCompat.Title"
               android:text="@string/app_title"/>
