@@ -2,7 +2,10 @@ package net.evendanan.lumiere
 
 import android.content.Intent
 import com.anysoftkeyboard.api.MediaInsertion
+import io.mockk.Called
+import io.mockk.clearMocks
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Assert
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,6 +50,34 @@ class MainActivityTest {
             Assert.assertTrue(ui is MainActivity.UiPresenterBridge)
             Assert.assertTrue(io is IOAndroid)
         }
+    }
+
+    @Test
+    fun presenterLifeCycle() {
+        val activityController = Robolectric.buildActivity(TestMainActivity::class.java)
+        val activity = activityController.get()
+        activityController.create()
+        verify { activity.mockPresenter!! wasNot Called }
+
+        activityController.start().visible().resume().postResume()
+        verify { activity.mockPresenter!!.onUiVisible() }
+        clearMocks(activity.mockPresenter!!)
+
+        activityController.pause().stop()
+
+        verify { activity.mockPresenter!!.onUiGone() }
+        clearMocks(activity.mockPresenter!!)
+
+        activityController.start().visible().resume().postResume()
+        verify { activity.mockPresenter!!.onUiVisible() }
+        clearMocks(activity.mockPresenter!!)
+
+        activityController.pause().stop()
+        verify { activity.mockPresenter!!.onUiGone() }
+        clearMocks(activity.mockPresenter!!)
+
+        activityController.destroy()
+        verify { activity.mockPresenter!!.destroy() }
     }
 }
 
