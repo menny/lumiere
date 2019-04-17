@@ -4,6 +4,8 @@ apply plugin: 'kotlin-android'
 
 apply plugin: 'kotlin-android-extensions'
 
+apply plugin: 'com.github.triplet.play'
+
 android {
     compileSdkVersion 28
     defaultConfig {
@@ -14,12 +16,38 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    signingConfigs {
+        release {
+            def keystoreFile = file("/tmp/apk.keystore")
+            if (keystoreFile.exists()) {
+                storeFile keystoreFile
+                storePassword System.getenv("LUMIERE_KEY_STORE_FILE_PASSWORD")
+                keyAlias 'lumiere'
+                keyPassword System.getenv("LUMIERE_ALIAS_KEY_STORE_FILE_PASSWORD")
+                println "Using '${storeFile.absolutePath}' to release APK ${path} (with alias '${keyAlias}')."
+            } else {
+                println "Could not find '${keystoreFile.absolutePath}' file. Can not sign release APK with release keystore! Using debug."
+                initWith signingConfigs.debug
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
+            zipAlignEnabled true
+            debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+}
+
+play {
+    track = System.getProperty('publishTrackOverride', 'alpha')
+    serviceAccountEmail = System.getenv().getOrDefault('PUBLISH_APK_SERVICE_ACCOUNT_EMAIL', 'dummy@example.com')
+    serviceAccountCredentials = file('/tmp/apk_upload_key.p12')
 }
 
 dependencies {

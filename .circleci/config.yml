@@ -33,7 +33,7 @@ jobs:
 
     - run:
         name: Setup environment
-        command: scripts/ci_setup.sh
+        command: scripts/ci/ci_setup.sh
 
     - run:
         name: Initial build
