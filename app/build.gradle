@@ -15,12 +15,14 @@ jacoco {
 
 android {
     compileSdkVersion 28
+    buildToolsVersion '28.0.3'
+
     defaultConfig {
         applicationId "net.evendanan.lumiere"
         minSdkVersion 21
         targetSdkVersion 28
-        versionCode 1
-        versionName "1.0"
+        versionCode rootProject.ext.versionData.versionCode
+        versionName rootProject.ext.versionData.versionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -51,9 +53,14 @@ android {
     }
 
     testOptions {
-        unitTests.all {
-            jacoco {
-                includeNoLocationClasses = true
+
+        unitTests {
+            includeAndroidResources true
+
+            all {
+                jacoco {
+                    includeNoLocationClasses = true
+                }
             }
         }
     }
