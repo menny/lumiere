@@ -82,6 +82,11 @@ open class MainActivity : AppCompatActivity() {
         presenter.onUiVisible()
     }
 
+    override fun onStop() {
+        super.onStop()
+        presenter.onUiGone()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         presenter.destroy()
