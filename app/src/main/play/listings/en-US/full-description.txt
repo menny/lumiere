@@ -7,3 +7,5 @@ Features:
 * Trending stream.
 * Search for a GIF.
 * Save a GIF to your device.
+
+Compatible with the `com.anysoftkeyboard.api.INTENT_MEDIA_INSERTION_REQUEST_ACTION` Android Intent.
