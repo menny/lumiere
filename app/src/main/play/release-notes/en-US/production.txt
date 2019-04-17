@@ -1,0 +1,5 @@
+* Initial release
+* Supports search from AnySoftKeyboard
+* Trending stream
+* Search for a GIF
+* Save a GIF to your device

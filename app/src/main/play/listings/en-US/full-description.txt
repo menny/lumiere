@@ -1,0 +1,9 @@
+Search any GIF you can think of from the huge library of Giphy™!
+
+A super simple app for find just the right GIF for the right response.
+
+Features:
+* Supports search from AnySoftKeyboard.
+* Trending stream.
+* Search for a GIF.
+* Save a GIF to your device.
