@@ -55,7 +55,7 @@ android {
     testOptions {
 
         unitTests {
-            includeAndroidResources true
+            includeAndroidResources = true
 
             all {
                 jacoco {
@@ -82,20 +82,21 @@ private void createJacocoReportTask(testTaskName, name) {
         task.group = "Reporting"
         task.description = "Generate Jacoco coverage reports for the ${name.capitalize()} build."
 
-        task.classDirectories = fileTree(
-                dir: "${project.buildDir}/intermediates/javac/${name}",
-                excludes: ['**/R.class',
-                           '**/R$*.class',
-                           'android/**/*.class',
-                           '**/*$ViewInjector*.*',
-                           '**/*$ViewBinder*.*',
-                           '**/BuildConfig.*',
-                           '**/*$Lambda$*.*',
-                           '**/*Dagger*.*',
-                           'android/**/*.*',
-                           '**/*$*$*.*',
-                           '**/Manifest*.*']
-        )
+        def excludes = ['**/R.class',
+                        '**/R$*.class',
+                        'android/**/*.class',
+                        '**/*$ViewInjector*.*',
+                        '**/*$ViewBinder*.*',
+                        '**/BuildConfig.*',
+                        '**/*$Lambda$*.*',
+                        '**/*Dagger*.*',
+                        '**/*Test*.*',
+                        'android/**/*.*',
+                        '**/*$*$*.*',
+                        '**/Manifest*.*']
+        def kotlinClasses = fileTree(dir: "${buildDir}/tmp/kotlin-classes/${name}", excludes: excludes)
+        def javaClasses = fileTree(dir: "${project.buildDir}/intermediates/javac/${name}", excludes: excludes)
+        task.classDirectories = files([kotlinClasses, javaClasses])
 
         task.sourceDirectories = files(["${project.projectDir}/src/main/java"] + android.sourceSets[name].java.srcDirs)
         task.executionData = files("${project.buildDir}/jacoco/${testTaskName}.exec")
@@ -135,5 +136,8 @@ dependencies {
     //required for giphy
     implementation 'com.google.code.gson:gson:2.8.5'
 
+    testImplementation "org.robolectric:robolectric:4.2"
     testImplementation 'junit:junit:4.12'
+    testImplementation 'io.mockk:mockk:1.9'
+    testImplementation 'androidx.test:core:1.1.0'
 }

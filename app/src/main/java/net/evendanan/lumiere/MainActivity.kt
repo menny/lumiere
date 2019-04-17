@@ -16,6 +16,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -34,7 +35,7 @@ import java.io.File
 private typealias ClickMediaActionNotify = (Media, ActionType) -> Unit
 private typealias QueryActionNotify = (query: String, ProviderType) -> Unit
 
-class MainActivity : AppCompatActivity() {
+open class MainActivity : AppCompatActivity() {
 
     private var runningPermissionsRequest: PermissionRequest? = null
     private lateinit var presenter: Presenter
@@ -49,20 +50,32 @@ class MainActivity : AppCompatActivity() {
         fab.setOnClickListener { presenter.onSearchIconClicked() }
 
         transitionGlideFactory = DrawableCrossFadeFactory.Builder().setCrossFadeEnabled(true).build()
-        loadingPlaceholder = GifDrawableBuilder().from(resources.openRawResource(R.raw.loading_gif)).build()
+        loadingPlaceholder = createLoadingDrawable()
         loadingError = getDrawable(R.drawable.ic_error_loading)!!
 
         root_list.adapter =
             SectionsAdapter(this, loadingPlaceholder, loadingError, this::onMediaItemClicked, this::onQuery)
         root_list.layoutManager = LinearLayoutManager(this, RecyclerView.VERTICAL, false)
 
-        presenter = PresenterImpl(
+        presenter = createPresenter(
             intent?.extras?.containsKey(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_REQUEST_ID_KEY) ?: false,
             GiphyMediaProvider(getString(R.string.giphy_api_key)),
             UiPresenterBridge(),
             IOAndroid(applicationContext)
         )
     }
+
+    @VisibleForTesting
+    internal open fun createLoadingDrawable(): Drawable =
+        GifDrawableBuilder().from(resources.openRawResource(R.raw.loading_gif)).build()
+
+    @VisibleForTesting
+    internal open fun createPresenter(
+        pickerMode: Boolean,
+        mediaProvider: MediaProvider,
+        ui: PresenterUI,
+        io: IO
+    ): Presenter = PresenterImpl(pickerMode, mediaProvider, ui, io)
 
     override fun onStart() {
         super.onStart()
