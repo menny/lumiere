@@ -6,6 +6,13 @@ apply plugin: 'kotlin-android-extensions'
 
 apply plugin: 'com.github.triplet.play'
 
+apply plugin: 'jacoco'
+
+jacoco {
+    // https://bintray.com/bintray/jcenter/org.jacoco:org.jacoco.core
+    toolVersion = "0.8.2"
+}
+
 android {
     compileSdkVersion 28
     defaultConfig {
@@ -40,6 +47,55 @@ android {
             debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    testOptions {
+        unitTests.all {
+            jacoco {
+                includeNoLocationClasses = true
+            }
+        }
+    }
+}
+
+project.afterEvaluate {
+
+    android.applicationVariants.all { variant ->
+        def name = variant.name
+        def testTaskName = "test${name.capitalize()}UnitTest"
+
+        createJacocoReportTask(testTaskName, name)
+    }
+}
+
+private void createJacocoReportTask(testTaskName, name) {
+    tasks.register("${testTaskName}Coverage", JacocoReport) { task ->
+        task.dependsOn tasks.named("$testTaskName")
+        task.group = "Reporting"
+        task.description = "Generate Jacoco coverage reports for the ${name.capitalize()} build."
+
+        task.classDirectories = fileTree(
+                dir: "${project.buildDir}/intermediates/javac/${name}",
+                excludes: ['**/R.class',
+                           '**/R$*.class',
+                           'android/**/*.class',
+                           '**/*$ViewInjector*.*',
+                           '**/*$ViewBinder*.*',
+                           '**/BuildConfig.*',
+                           '**/*$Lambda$*.*',
+                           '**/*Dagger*.*',
+                           'android/**/*.*',
+                           '**/*$*$*.*',
+                           '**/Manifest*.*']
+        )
+
+        task.sourceDirectories = files(["${project.projectDir}/src/main/java"] + android.sourceSets[name].java.srcDirs)
+        task.executionData = files("${project.buildDir}/jacoco/${testTaskName}.exec")
+
+        task.reports {
+            xml.enabled = true
+            html.enabled = true
         }
     }
 }

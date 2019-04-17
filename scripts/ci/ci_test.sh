@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-./gradlew ${EXTRA_GRADLE_ARGS} testDebugUnitTest
+./gradlew ${EXTRA_GRADLE_ARGS} testDebugUnitTest testDebugUnitTestCoverage

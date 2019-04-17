@@ -14,6 +14,7 @@ references:
     environment:
       TERM: dumb
       EXTRA_GRADLE_ARGS: "--no-daemon --max-workers=2 --stacktrace"
+      CODECOV_TOKEN: "58e3a4d2-7cc3-4fef-a20e-3b228e7ae167"
 
   attach_workspace: &attach_workspace
     attach_workspace:
@@ -82,6 +83,13 @@ jobs:
     - run:
         name: Run Tests
         command: ./scripts/ci/ci_test.sh
+
+    - run:
+        name: Push to codecov
+        command: |
+          curl https://codecov.io/bash -o codecov.sh
+          chmod +x codecov.sh
+          ./codecov.sh -X gcov -X coveragepy -X xcode `find . -name "test*UnitTestCoverage.xml" | xargs -n 1 echo -n " -f "`
 
     - store_artifacts:
         path: /opt/workspace/app/build/reports/tests/testDebugUnitTest/*
