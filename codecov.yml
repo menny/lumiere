@@ -1,0 +1,29 @@
+codecov:
+  branch: master
+  notify:
+    require_ci_to_pass: yes
+coverage:
+  precision: 2
+  round: down
+  range: "10...100"
+
+  ignore:
+  - "app/src/test"
+  status:
+    project:
+      default:
+        enabled: yes
+        target: auto
+        threshold: 2%
+        base: auto
+
+    patch:
+      default:
+        enabled: yes
+        target: auto
+          threshold: 10%
+          base: auto
+
+comment:
+  layout: "header, diff, tree"
+  behavior: default
