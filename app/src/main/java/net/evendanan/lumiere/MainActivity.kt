@@ -75,7 +75,7 @@ open class MainActivity : AppCompatActivity() {
         mediaProvider: MediaProvider,
         ui: PresenterUI,
         io: IO
-    ): Presenter = PresenterImpl(pickerMode, mediaProvider, ui, io)
+    ): Presenter = PresenterImpl(pickerMode, mediaProvider, ui, io, AndroidDispatchersProvider)
 
     override fun onStart() {
         super.onStart()
