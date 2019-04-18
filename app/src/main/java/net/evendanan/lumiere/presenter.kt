@@ -4,11 +4,24 @@ import android.Manifest
 import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
-import kotlinx.coroutines.*
-import kotlinx.coroutines.android.Main
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
+import kotlin.Boolean
+import kotlin.Comparator
+import kotlin.Exception
+import kotlin.Int
+import kotlin.String
+import kotlin.TODO
+import kotlin.Unit
+import kotlin.apply
+import kotlin.let
+import kotlin.run
+import kotlin.to
 
 interface Presenter {
     fun onSearchIconClicked()
@@ -85,7 +98,8 @@ class PresenterImpl(
     private val pickerMode: Boolean,
     private val mediaProvider: MediaProvider,
     private val ui: PresenterUI,
-    private val io: IO
+    private val io: IO,
+    private val dispatchers: DispatchersProvider
 ) :
     Presenter {
     private val availableProviders: MutableMap<ProviderType, ItemsProviderImpl>
@@ -93,7 +107,7 @@ class PresenterImpl(
     private var viewModelJob = Job()
     private var searchJob = Job()
     private var downloadJob = Job()
-    private val uiScope = CoroutineScope(Dispatchers.Main)
+    private val uiScope = CoroutineScope(dispatchers.main)
 
     private val defaultActions = if (pickerMode) setOf(ActionType.Main) else setOf(ActionType.Share, ActionType.Save)
 
@@ -108,8 +122,8 @@ class PresenterImpl(
             ui.setItemsProviders(availableProviders.values.toSortedCollection())
         }
 
-        viewModelJob = uiScope.launch(Dispatchers.Main.immediate) {
-            val trending = withContext(Dispatchers.Default) {
+        viewModelJob = uiScope.launch(dispatchers.immediateMain) {
+            val trending = withContext(dispatchers.background) {
                 mediaProvider.blockingTrending()
             }
             availableProviders[ProviderType.Trending]?.setItems(trending)
@@ -148,12 +162,12 @@ class PresenterImpl(
         if (pickerMode) {
             downloadJob.cancel()
 
-            downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
+            downloadJob = uiScope.launch(dispatchers.immediateMain) {
                 Log.d("presenter", "Starting saving to disk")
                 ui.showProgress()
 
                 try {
-                    withContext(Dispatchers.Default) {
+                    withContext(dispatchers.background) {
                         downloadToAppStorage(media).apply {
                             io.asShareUri(this).let { uriForAnySoftKeyboard ->
                                 io.grantUriReadAccess(uriForAnySoftKeyboard, "com.menny.android.anysoftkeyboard")
@@ -176,12 +190,12 @@ class PresenterImpl(
     private fun shareFromAppStorage(media: Media) {
         downloadJob.cancel()
 
-        downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
+        downloadJob = uiScope.launch(dispatchers.immediateMain) {
             Log.d("presenter", "Starting saving to disk")
             ui.showProgress()
 
             try {
-                withContext(Dispatchers.Default) {
+                withContext(dispatchers.background) {
                     downloadToAppStorage(media).apply {
                         ui.showShareWindow(io.asShareUri(this))
                     }
@@ -198,17 +212,17 @@ class PresenterImpl(
     private fun saveToLocalStorage(media: Media) {
         downloadJob.cancel()
 
-        downloadJob = uiScope.launch(Dispatchers.Main.immediate) {
+        downloadJob = uiScope.launch(dispatchers.immediateMain) {
             val havePermission = PermissionRequest(123, listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)).run {
                 ui.askForPermission(this)
-                return@run waitForResponse()
+                return@run withContext(dispatchers.background) { waitForResponse() }
             }
             if (havePermission) {
                 Log.d("presenter", "Starting saving to disk")
                 ui.showProgress()
 
                 try {
-                    withContext(Dispatchers.Default) {
+                    withContext(dispatchers.background) {
                         downloadToAppStorage(media).let { appFileUri ->
                             io.localStorageFolder.let { localFileFile ->
                                 if (localFileFile.isDirectory || localFileFile.mkdirs()) {
@@ -258,11 +272,11 @@ class PresenterImpl(
 
         //consider putting a local-loading GIF image here.
         availableProviders[ProviderType.Search]?.setItems(emptyList())
-        searchJob = uiScope.launch(Dispatchers.Main.immediate) {
+        searchJob = uiScope.launch(dispatchers.immediateMain) {
             val search = if (query.isEmpty()) {
                 emptyList()
             } else {
-                withContext(Dispatchers.Default) {
+                withContext(dispatchers.background) {
                     mediaProvider.blockingSearch(query)
                 }
             }
