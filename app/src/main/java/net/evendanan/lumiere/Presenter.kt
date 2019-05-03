@@ -11,29 +11,32 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
-import kotlin.Boolean
-import kotlin.Comparator
-import kotlin.Exception
-import kotlin.Int
-import kotlin.String
-import kotlin.TODO
-import kotlin.Unit
 import kotlin.apply
-import kotlin.let
 import kotlin.run
-import kotlin.to
 
 interface Presenter {
-    fun onSearchIconClicked()
+    fun setPresenterUi(ui: PresenterUI)
 
-    fun onUiVisible()
-    fun onUiGone()
+    fun onSearchIconClicked()
 
     fun onMediaActionClicked(media: Media, action: ActionType)
 
     fun onQuery(query: String, providerType: ProviderType)
 
     fun destroy()
+
+    object NOOP : Presenter {
+
+        override fun setPresenterUi(ui: PresenterUI) {}
+
+        override fun onSearchIconClicked() {}
+
+        override fun onMediaActionClicked(media: Media, action: ActionType) {}
+
+        override fun onQuery(query: String, providerType: ProviderType) {}
+
+        override fun destroy() {}
+    }
 }
 
 enum class ActionType {
@@ -54,7 +57,8 @@ interface ItemsProvider {
     val supportedActions: Set<ActionType>
     val type: ProviderType
     val hasQuery: Boolean
-    fun setOnItemsAvailableListener(listener: (List<Media>) -> Unit)
+    val loadingInProgress: Boolean
+    val mediaItems: List<Media>
 }
 
 class PermissionRequest(val requestId: Int, val permissions: List<String>) {
@@ -92,17 +96,37 @@ interface PresenterUI {
     fun notifyLocalMediaFile(file: File, shareUri: Uri)
     fun showShareWindow(shareUri: Uri)
     fun shareToAnySoftKeyboard(shareUri: Uri)
+
+    object NOOP : PresenterUI {
+        override fun setItemsProviders(providers: List<ItemsProvider>) {}
+
+        override fun focusOnSection(providerType: ProviderType) {}
+
+        override fun askForPermission(permissionRequest: PermissionRequest) {}
+
+        override fun fabVisibility(visible: Boolean) {}
+
+        override fun showProgress() {}
+
+        override fun hideProgress() {}
+
+        override fun notifyLocalMediaFile(file: File, shareUri: Uri) {}
+
+        override fun showShareWindow(shareUri: Uri) {}
+
+        override fun shareToAnySoftKeyboard(shareUri: Uri) {}
+    }
 }
 
 class PresenterImpl(
     private val pickerMode: Boolean,
     private val mediaProvider: MediaProvider,
-    private val ui: PresenterUI,
     private val io: IO,
     private val dispatchers: DispatchersProvider
 ) :
     Presenter {
-    private val availableProviders: MutableMap<ProviderType, ItemsProviderImpl>
+    private var ui: PresenterUI = PresenterUI.NOOP
+    private val availableProviders: MutableMap<ProviderType, ItemsProviderImpl> = mutableMapOf()
 
     private var viewModelJob = Job()
     private var searchJob = Job()
@@ -112,30 +136,36 @@ class PresenterImpl(
     private val defaultActions = if (pickerMode) setOf(ActionType.Main) else setOf(ActionType.Share, ActionType.Save)
 
     init {
-        availableProviders = mutableMapOf(
-            ProviderType.Trending to ItemsProviderImpl(ProviderType.Trending, false, defaultActions)
-        )
+        setProviderItems(ProviderType.Trending, true, emptyList())
 
         if (pickerMode) {
             onSearchIconClicked()
-        } else {
-            ui.setItemsProviders(availableProviders.values.toSortedCollection())
         }
 
         viewModelJob = uiScope.launch(dispatchers.immediateMain) {
             val trending = withContext(dispatchers.background) {
                 mediaProvider.blockingTrending()
             }
-            availableProviders[ProviderType.Trending]?.setItems(trending)
+            setProviderItems(ProviderType.Trending, false, trending)
         }
     }
 
-    override fun onUiVisible() {
+    override fun setPresenterUi(ui: PresenterUI) {
+        this.ui = ui
+        ui.setItemsProviders(availableProviders.values.toSortedCollection())
     }
 
-    override fun onUiGone() {
-        viewModelJob.cancel()
-        searchJob.cancel()
+    private fun setProviderItems(providerType: ProviderType, loading: Boolean, items: List<Media>) {
+        availableProviders.getOrPut(
+            providerType,
+            { ItemsProviderImpl(providerType, providerType == ProviderType.Search, defaultActions) }).run {
+            this.loadingInProgress = loading
+            this.items.run {
+                clear()
+                addAll(items)
+            }
+        }
+        ui.setItemsProviders(availableProviders.values.toSortedCollection())
     }
 
     override fun onMediaActionClicked(media: Media, action: ActionType) {
@@ -260,8 +290,7 @@ class PresenterImpl(
         availableProviders[ProviderType.Search].let {
             if (it == null) {
                 ui.fabVisibility(false)
-                availableProviders[ProviderType.Search] = ItemsProviderImpl(ProviderType.Search, true, defaultActions)
-                ui.setItemsProviders(availableProviders.values.toSortedCollection())
+                setProviderItems(ProviderType.Search, false, emptyList())
                 ui.focusOnSection(ProviderType.Search)
             }
         }
@@ -271,7 +300,8 @@ class PresenterImpl(
         searchJob.cancel()
 
         //consider putting a local-loading GIF image here.
-        availableProviders[ProviderType.Search]?.setItems(emptyList())
+        setProviderItems(ProviderType.Search, true, emptyList())
+
         searchJob = uiScope.launch(dispatchers.immediateMain) {
             val search = if (query.isEmpty()) {
                 emptyList()
@@ -280,8 +310,7 @@ class PresenterImpl(
                     mediaProvider.blockingSearch(query)
                 }
             }
-            availableProviders[ProviderType.Search]?.setItems(search)
-            ui.focusOnSection(ProviderType.Search)
+            setProviderItems(ProviderType.Search, false, search)
         }
     }
 
@@ -296,24 +325,12 @@ private class ItemsProviderImpl(
     override val type: ProviderType, override val hasQuery: Boolean,
     override val supportedActions: Set<ActionType>
 ) : ItemsProvider {
-    private var items = emptyList<Media>()
-    private var listener: ((List<Media>) -> Unit) = this::noOpListener
+    internal val items = mutableListOf<Media>()
 
-    override fun setOnItemsAvailableListener(listener: (List<Media>) -> Unit) {
-        this.listener = listener
-        notifyItems()
-    }
+    override var loadingInProgress = false
 
-    fun setItems(items: List<Media>) {
-        this.items = items
-        notifyItems()
-    }
-
-    private fun notifyItems() {
-        listener(items)
-    }
-
-    fun noOpListener(items: List<Media>) {}
+    override val mediaItems: List<Media>
+        get() = items
 }
 
 private fun Collection<ItemsProvider>.toSortedCollection() =

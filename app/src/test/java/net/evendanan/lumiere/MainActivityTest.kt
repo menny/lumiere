@@ -1,108 +1,120 @@
 package net.evendanan.lumiere
 
+import android.app.Application
+import android.content.ComponentName
 import android.content.Intent
+import android.os.IBinder
+import androidx.test.core.app.ApplicationProvider
 import com.anysoftkeyboard.api.MediaInsertion
 import io.mockk.Called
 import io.mockk.clearMocks
 import io.mockk.mockk
 import io.mockk.verify
+import net.evendanan.lumiere.services.DefaultPresenterService
+import net.evendanan.lumiere.services.PickerPresenterService
+import net.evendanan.lumiere.ui.MainActivity
 import org.junit.Assert
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.Shadows
+import org.robolectric.shadows.ShadowApplication
 
 @RunWith(org.robolectric.RobolectricTestRunner::class)
 class MainActivityTest {
 
-    @Test
-    fun doesNotBuildPresenterUntilCreate() {
-        val activityController = Robolectric.buildActivity(TestMainActivity::class.java)
-        Assert.assertNull(activityController.get().mockPresenter)
-        activityController.create()
-        Assert.assertNotNull(activityController.get().mockPresenter)
+    private lateinit var defaultPresenter: PresenterBinder
+    private lateinit var pickerPresenter: PresenterBinder
+    private lateinit var shadowApplication: ShadowApplication
+
+    @Before
+    fun setup() {
+        defaultPresenter = mockk(relaxed = true)
+        pickerPresenter = mockk(relaxed = true)
+        ApplicationProvider.getApplicationContext<Application>().let { app ->
+            Shadows.shadowOf(app).run {
+                shadowApplication = this
+                setComponentNameAndServiceForBindServiceForIntent(
+                    Intent(app, DefaultPresenterService::class.java),
+                    ComponentName(app, DefaultPresenterService::class.java),
+                    defaultPresenter
+                )
+                setComponentNameAndServiceForBindServiceForIntent(
+                    Intent(app, PickerPresenterService::class.java),
+                    ComponentName(app, PickerPresenterService::class.java),
+                    pickerPresenter
+                )
+            }
+        }
     }
 
     @Test
     fun notPickerModeWhenDefaultIntent() {
-        val activity = Robolectric.buildActivity(TestMainActivity::class.java).setup().get()
+        Robolectric.buildActivity(TestMainActivity::class.java).setup()
 
-        Assert.assertFalse(activity.presenterInitArgs.pickerMode)
+        verify {
+            defaultPresenter.setPresenterUi(any())
+            pickerPresenter wasNot Called
+        }
     }
 
     @Test
     fun pickerModeWhenStartedByAnySoftKeyboard() {
-        val activity = Robolectric.buildActivity(TestMainActivity::class.java,
+        Robolectric.buildActivity(TestMainActivity::class.java,
             Intent(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_ACTION).apply {
                 putExtra(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_REQUEST_ID_KEY, 123)
                 putExtra(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_MIMES_KEY, arrayOf("image/png"))
             })
-            .setup().get()
+            .setup()
 
-        Assert.assertTrue(activity.presenterInitArgs.pickerMode)
+        verify {
+            pickerPresenter.setPresenterUi(any())
+            defaultPresenter wasNot Called
+        }
     }
 
     @Test
-    fun presenterInitArgsAreReal() {
-        val activity = Robolectric.buildActivity(TestMainActivity::class.java).setup().get()
+    fun presenterServiceCalls() {
+        Assert.assertNull(shadowApplication.nextStartedService)
+        Robolectric.buildActivity(TestMainActivity::class.java).create()
 
-        activity.presenterInitArgs.apply {
-            Assert.assertTrue(mediaProvider is GiphyMediaProvider)
-            Assert.assertTrue(ui is MainActivity.UiPresenterBridge)
-            Assert.assertTrue(io is IOAndroid)
+        shadowApplication.nextStartedService.run {
+            Assert.assertNotNull(this)
+            Assert.assertNotNull(component)
+            Assert.assertEquals(DefaultPresenterService::class.java.name, component.className)
         }
     }
 
     @Test
     fun presenterLifeCycle() {
         val activityController = Robolectric.buildActivity(TestMainActivity::class.java)
-        val activity = activityController.get()
         activityController.create()
-        verify { activity.mockPresenter!! wasNot Called }
+        verify { defaultPresenter.setPresenterUi(any()) }
+        verify(exactly = 0) { defaultPresenter.destroy() }
+        clearMocks(defaultPresenter)
 
         activityController.start().visible().resume().postResume()
-        verify { activity.mockPresenter!!.onUiVisible() }
-        clearMocks(activity.mockPresenter!!)
+        verify { defaultPresenter wasNot Called }
 
         activityController.pause().stop()
 
-        verify { activity.mockPresenter!!.onUiGone() }
-        clearMocks(activity.mockPresenter!!)
+        verify { defaultPresenter wasNot Called }
 
         activityController.start().visible().resume().postResume()
-        verify { activity.mockPresenter!!.onUiVisible() }
-        clearMocks(activity.mockPresenter!!)
+
+        verify { defaultPresenter wasNot Called }
 
         activityController.pause().stop()
-        verify { activity.mockPresenter!!.onUiGone() }
-        clearMocks(activity.mockPresenter!!)
+        verify { defaultPresenter wasNot Called }
 
         activityController.destroy()
-        verify { activity.mockPresenter!!.destroy() }
+        verify { defaultPresenter.destroy() }
     }
 }
 
-data class PresenterInitArgs(
-    val pickerMode: Boolean,
-    val mediaProvider: MediaProvider,
-    val ui: PresenterUI,
-    val io: IO
-)
+private interface PresenterBinder : IBinder, Presenter
 
 private class TestMainActivity : MainActivity() {
-
-    lateinit var presenterInitArgs: PresenterInitArgs
-    var mockPresenter: Presenter? = null
-
-    override fun createPresenter(
-        pickerMode: Boolean,
-        mediaProvider: MediaProvider,
-        ui: PresenterUI,
-        io: IO
-    ): Presenter {
-        presenterInitArgs = PresenterInitArgs(pickerMode, mediaProvider, ui, io)
-
-        return mockk<Presenter>(relaxed = true).apply { mockPresenter = this }
-    }
-
     override fun createLoadingDrawable() = resources.getDrawable(R.drawable.ic_media_save, theme)
 }

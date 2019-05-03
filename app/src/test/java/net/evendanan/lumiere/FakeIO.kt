@@ -9,7 +9,7 @@ import java.io.OutputStream
 internal class FakeIO : IOAndroid(ApplicationProvider.getApplicationContext()) {
     val readUris = mutableListOf<Uri>()
     val writtenUri = mutableListOf<Uri>()
-    val allowedShareableUris = mutableSetOf<Pair<Uri, String>>()
+    private val allowedShareableUris = mutableSetOf<Pair<Uri, String>>()
 
     override fun openUriForReading(uri: Uri): InputStream {
         readUris.add(uri)

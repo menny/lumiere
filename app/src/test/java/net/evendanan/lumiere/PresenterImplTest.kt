@@ -26,7 +26,8 @@ class PresenterImplTest {
 
     @Test
     fun testAsksForPermissionOnSaveActionAndNotSavingIfDenied() {
-        val underTest = PresenterImpl(false, FakeMediaProvider(), presenterUI, io, UnconfinedDispatchersProvider())
+        val underTest = PresenterImpl(false, FakeMediaProvider(), io, UnconfinedDispatchersProvider())
+        underTest.setPresenterUi(presenterUI)
 
         val capturingRequest = slot<PermissionRequest>()
         every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
@@ -53,7 +54,8 @@ class PresenterImplTest {
 
     @Test
     fun testAsksForPermissionOnSaveActionAndSavingIfGranted() {
-        val underTest = PresenterImpl(false, FakeMediaProvider(), presenterUI, io, UnconfinedDispatchersProvider())
+        val underTest = PresenterImpl(false, FakeMediaProvider(), io, UnconfinedDispatchersProvider())
+        underTest.setPresenterUi(presenterUI)
 
         val capturingRequest = slot<PermissionRequest>()
         every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
@@ -97,8 +99,12 @@ class PresenterImplTest {
         every { mediaProvider.blockingSearch(any()) } throws IOException("search network failure")
         every { mediaProvider.blockingTrending() } throws IOException("trending network failure")
 
-        val underTest = PresenterImpl(false, mediaProvider, presenterUI, io, UnconfinedDispatchersProvider())
+        val underTest = PresenterImpl(false, mediaProvider, io, UnconfinedDispatchersProvider())
+        underTest.setPresenterUi(presenterUI)
 
-        verify { presenterUI.setItemsProviders(any()) }
+        verify {
+            presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
+        }
     }
 }
