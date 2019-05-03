@@ -5,8 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.core.net.toFile
+import net.evendanan.lumiere.okhttp.lumiereOkHttp
+import okhttp3.Request
 import java.io.*
-import java.net.URL
 
 
 interface IO {
@@ -40,7 +41,7 @@ internal open class IOAndroid(private val context: Context) : IO {
     override fun openUriForReading(uri: Uri): InputStream {
         return when (uri.scheme) {
             "file" -> FileInputStream(uri.toFile())
-            "http", "https" -> URL(uri.toString()).openStream()
+            "http", "https" -> lumiereOkHttp.newCall(Request.Builder().get().url(uri.toString()).build()).execute().body()!!.byteStream()
             "content" -> context.contentResolver.openInputStream(uri)!!
             else -> throw IllegalArgumentException("url scheme ${uri.scheme} for $uri is not supported for reading.")
         }

@@ -9,7 +9,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
-import com.bumptech.glide.load.engine.DiskCacheStrategy
 import net.evendanan.lumiere.ActionType
 import net.evendanan.lumiere.ItemsProvider
 import net.evendanan.lumiere.Media
@@ -57,7 +56,6 @@ internal class MediaItemsAdapter(
             holder.media = it
             Glide.with(activity)
                 .load(it.preview)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .placeholder(placeholder)
                 .error(error)
                 .into(holder.image)

@@ -153,6 +153,13 @@ class PresenterImpl(
     override fun setPresenterUi(ui: PresenterUI) {
         this.ui = ui
         ui.setItemsProviders(availableProviders.values.toSortedCollection())
+        if (availableProviders.containsKey(ProviderType.Search)) {
+            ui.fabVisibility(false)
+            ui.focusOnSection(ProviderType.Search)
+        } else {
+            ui.fabVisibility(true)
+        }
+
     }
 
     private fun setProviderItems(providerType: ProviderType, loading: Boolean, items: List<Media>) {

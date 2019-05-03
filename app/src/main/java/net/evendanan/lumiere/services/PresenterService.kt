@@ -3,15 +3,22 @@ package net.evendanan.lumiere.services
 import android.app.Service
 import android.content.Intent
 import android.os.Binder
+import androidx.annotation.VisibleForTesting
 import net.evendanan.lumiere.*
 
 abstract class PresenterServiceBase : Service() {
 
-    private var presenter: Presenter = Presenter.NOOP
+    @VisibleForTesting
+    internal var presenter: Presenter = Presenter.NOOP
 
     protected abstract fun createPresenter(): Presenter
 
     override fun onBind(intent: Intent) = LocalBinder()
+
+    override fun onCreate() {
+        super.onCreate()
+        presenter = createPresenter()
+    }
 
     override fun onDestroy() {
         super.onDestroy()

@@ -76,6 +76,7 @@ class PresenterImplTest {
 
         coVerifySequence {
             presenterUI.setItemsProviders(any())
+            presenterUI.fabVisibility(any())
             presenterUI.askForPermission(any())
             presenterUI.showProgress()
             presenterUI.notifyLocalMediaFile(io.writtenUri[1].toFile(), io.writtenUri[0])
