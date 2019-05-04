@@ -73,21 +73,7 @@ class PresenterImplTest {
                 "3oKIPmUUz1MT9u3UA0.gif"
             ), ActionType.Save
         )
-/*
-1) PresenterUI(#31).askForPermission(net.evendanan.lumiere.PermissionRequest@22f3440a)
-2) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
-3) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
-4) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
-5) PresenterUI(#31).fabVisibility(true)
-6) PresenterUI(#31).askForPermission(net.evendanan.lumiere.PermissionRequest@2f329e64)
-7) PresenterUI(#31).showProgress()
-8) PresenterUI(#31).notifyLocalMediaFile(/var/folders/nv/1c6gxjkx7xn9_g1l3dbsl7rc0000gp/T/robolectric-Method_testAsksForPermissionOnSaveActionAndSavingIfGranted5854220085765481715/external-files/LumiereGifs/3oKIPmUUz1MT9u3UA0.gif, file:///var/folders/nv/1c6gxjkx7xn9_g1l3dbsl7rc0000gp/T/robolectric-Method_testAsksForPermissionOnSaveActionAndSavingIfGranted5854220085765481715/net.evendanan.lumiere-dataDir/files/media/3oKIPmUUz1MT9u3UA0.gif)
-9) PresenterUI(#31).hideProgress()
-10) PresenterUI(#31).askForPermission(net.evendanan.lumiere.PermissionRequest@54c9b109)
-11) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
-12) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
 
- */
         coVerifySequence {
             //loading local files
             presenterUI.askForPermission(any())
@@ -119,12 +105,12 @@ class PresenterImplTest {
     }
 
     @Test
-    fun testDoesNotCrushOnNetworkError() {
+    fun testDoesNotCrushOnNetworkErrorWithTrending() {
         val mediaProvider = mockk<MediaProvider>()
         every { mediaProvider.blockingSaved() } returns emptyList()
         every { mediaProvider.blockingRecents() } returns emptyList()
         every { mediaProvider.blockingGallery() } returns emptyList()
-        every { mediaProvider.blockingSearch(any()) } throws IOException("search network failure")
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
         every { mediaProvider.blockingTrending() } throws IOException("trending network failure")
 
         val underTest = PresenterImpl(false, mediaProvider, io, UnconfinedDispatchersProvider())
@@ -134,6 +120,29 @@ class PresenterImplTest {
             presenterUI.setItemsProviders(any())
             presenterUI.setItemsProviders(any())
         }
+    }
+
+    @Test
+    fun testDoesNotCrushOnNetworkErrorWithSearch() {
+        val mediaProvider = mockk<MediaProvider>()
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } throws IOException("search network failure")
+        every { mediaProvider.blockingTrending() } returns emptyList()
+
+        val underTest = PresenterImpl(false, mediaProvider, io, UnconfinedDispatchersProvider())
+        underTest.setPresenterUi(presenterUI)
+
+        verify {
+            presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
+        }
+
+        underTest.onSearchIconClicked()
+        verify(exactly = 0) { mediaProvider.blockingSearch(any()) }
+        underTest.onQuery("testing", ProviderType.Search)
+        verify { mediaProvider.blockingSearch("testing") }
     }
 
     @Test

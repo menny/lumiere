@@ -85,7 +85,7 @@ class MainActivityTest {
         shadowApplication.nextStartedService.run {
             Assert.assertNotNull(this)
             Assert.assertNotNull(component)
-            Assert.assertEquals(DefaultPresenterService::class.java.name, component.className)
+            Assert.assertEquals(DefaultPresenterService::class.java.name, component!!.className)
         }
     }
 
@@ -130,6 +130,7 @@ class MainActivityTest {
         underTest.onServiceDisconnected(ComponentName("p", "c"))
         Assert.assertSame(Presenter.NOOP, underTest.presenter)
         verify { defaultPresenter wasNot Called }
+
     }
 }
 
