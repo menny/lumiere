@@ -3,6 +3,12 @@ package net.evendanan.lumiere
 import android.net.Uri
 
 class FakeMediaProvider : MediaProvider {
+    override fun blockingSaved(): List<Media> = emptyList()
+
+    override fun blockingRecents(): List<Media> = emptyList()
+
+    override fun blockingGallery(): List<Media> = emptyList()
+
     override fun blockingSearch(phrase: String): List<Media> {
         return listOf(
             Media(

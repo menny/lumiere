@@ -102,7 +102,9 @@ interface PresenterUI {
 
         override fun focusOnSection(providerType: ProviderType) {}
 
-        override fun askForPermission(permissionRequest: PermissionRequest) {}
+        override fun askForPermission(permissionRequest: PermissionRequest) {
+            permissionRequest.onPermissionDenied()
+        }
 
         override fun fabVisibility(visible: Boolean) {}
 
@@ -142,7 +144,9 @@ class PresenterImpl(
             onSearchIconClicked()
         }
 
+        loadLocalGifs()
         viewModelJob = uiScope.launch(dispatchers.immediateMain) {
+            setProviderItems(ProviderType.Trending, true, emptyList())
             val trending = withContext(dispatchers.background) {
                 mediaProvider.blockingTrending()
             }
@@ -150,8 +154,31 @@ class PresenterImpl(
         }
     }
 
+    private fun loadLocalGifs() {
+        viewModelJob.cancel()
+        viewModelJob = uiScope.launch(dispatchers.immediateMain) {
+            val havePermission = PermissionRequest(123, listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)).run {
+                ui.askForPermission(this)
+                return@run withContext(dispatchers.background) { waitForResponse() }
+            }
+
+            if (havePermission) {
+                val recentGifs = withContext(dispatchers.background) {
+                    mediaProvider.blockingRecents()
+                }
+                setProviderItems(ProviderType.History, false, recentGifs)
+
+                val saved = withContext(dispatchers.background) {
+                    mediaProvider.blockingSaved()
+                }
+                setProviderItems(ProviderType.Favorites, false, saved)
+            }
+        }
+    }
+
     override fun setPresenterUi(ui: PresenterUI) {
         this.ui = ui
+        loadLocalGifs()
         ui.setItemsProviders(availableProviders.values.toSortedCollection())
         if (availableProviders.containsKey(ProviderType.Search)) {
             ui.fabVisibility(false)
@@ -165,7 +192,13 @@ class PresenterImpl(
     private fun setProviderItems(providerType: ProviderType, loading: Boolean, items: List<Media>) {
         availableProviders.getOrPut(
             providerType,
-            { ItemsProviderImpl(providerType, providerType == ProviderType.Search, defaultActions) }).run {
+            {
+                ItemsProviderImpl(
+                    providerType,
+                    providerType == ProviderType.Search,
+                    defaultActions.filterForProvider(providerType)
+                )
+            }).run {
             this.loadingInProgress = loading
             this.items.run {
                 clear()
@@ -173,6 +206,13 @@ class PresenterImpl(
             }
         }
         ui.setItemsProviders(availableProviders.values.toSortedCollection())
+    }
+
+    private fun Set<ActionType>.filterForProvider(providerType: ProviderType): Set<ActionType> {
+        return when (providerType) {
+            ProviderType.Favorites -> toMutableSet().apply { remove(ActionType.Save) }
+            else -> this
+        }
     }
 
     override fun onMediaActionClicked(media: Media, action: ActionType) {
@@ -276,6 +316,7 @@ class PresenterImpl(
                     e.printStackTrace()
                 } finally {
                     ui.hideProgress()
+                    loadLocalGifs()
                 }
             }
         }

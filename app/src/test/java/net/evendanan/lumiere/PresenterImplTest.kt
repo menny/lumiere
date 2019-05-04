@@ -21,18 +21,24 @@ class PresenterImplTest {
     @Before
     fun setup() {
         presenterUI = mockk(relaxed = true)
+        val capturingRequest = slot<PermissionRequest>()
+        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
+            Shadows.shadowOf(ApplicationProvider.getApplicationContext() as Application)
+                .grantPermissions(*(capturingRequest.captured.permissions.toTypedArray()))
+            capturingRequest.captured.onPermissionGranted()
+        }
         io = FakeIO()
     }
 
     @Test
     fun testAsksForPermissionOnSaveActionAndNotSavingIfDenied() {
         val underTest = PresenterImpl(false, FakeMediaProvider(), io, UnconfinedDispatchersProvider())
-        underTest.setPresenterUi(presenterUI)
-
         val capturingRequest = slot<PermissionRequest>()
         every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
             capturingRequest.captured.onPermissionDenied()
         }
+
+        underTest.setPresenterUi(presenterUI)
 
         underTest.onMediaActionClicked(
             Media(
@@ -55,14 +61,8 @@ class PresenterImplTest {
     @Test
     fun testAsksForPermissionOnSaveActionAndSavingIfGranted() {
         val underTest = PresenterImpl(false, FakeMediaProvider(), io, UnconfinedDispatchersProvider())
-        underTest.setPresenterUi(presenterUI)
 
-        val capturingRequest = slot<PermissionRequest>()
-        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
-            Shadows.shadowOf(ApplicationProvider.getApplicationContext() as Application)
-                .grantPermissions(*(capturingRequest.captured.permissions.toTypedArray()))
-            capturingRequest.captured.onPermissionGranted()
-        }
+        underTest.setPresenterUi(presenterUI)
 
         underTest.onMediaActionClicked(
             Media(
@@ -73,14 +73,38 @@ class PresenterImplTest {
                 "3oKIPmUUz1MT9u3UA0.gif"
             ), ActionType.Save
         )
+/*
+1) PresenterUI(#31).askForPermission(net.evendanan.lumiere.PermissionRequest@22f3440a)
+2) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
+3) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
+4) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
+5) PresenterUI(#31).fabVisibility(true)
+6) PresenterUI(#31).askForPermission(net.evendanan.lumiere.PermissionRequest@2f329e64)
+7) PresenterUI(#31).showProgress()
+8) PresenterUI(#31).notifyLocalMediaFile(/var/folders/nv/1c6gxjkx7xn9_g1l3dbsl7rc0000gp/T/robolectric-Method_testAsksForPermissionOnSaveActionAndSavingIfGranted5854220085765481715/external-files/LumiereGifs/3oKIPmUUz1MT9u3UA0.gif, file:///var/folders/nv/1c6gxjkx7xn9_g1l3dbsl7rc0000gp/T/robolectric-Method_testAsksForPermissionOnSaveActionAndSavingIfGranted5854220085765481715/net.evendanan.lumiere-dataDir/files/media/3oKIPmUUz1MT9u3UA0.gif)
+9) PresenterUI(#31).hideProgress()
+10) PresenterUI(#31).askForPermission(net.evendanan.lumiere.PermissionRequest@54c9b109)
+11) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
+12) PresenterUI(#31).setItemsProviders([net.evendanan.lumiere.ItemsProviderImpl@521522a1, net.evendanan.lumiere.ItemsProviderImpl@17d95b81, net.evendanan.lumiere.ItemsProviderImpl@29a34c1])
 
+ */
         coVerifySequence {
+            //loading local files
+            presenterUI.askForPermission(any())
+            presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
+            //load trending
             presenterUI.setItemsProviders(any())
             presenterUI.fabVisibility(any())
+            //user wants to save
             presenterUI.askForPermission(any())
             presenterUI.showProgress()
             presenterUI.notifyLocalMediaFile(io.writtenUri[1].toFile(), io.writtenUri[0])
             presenterUI.hideProgress()
+            //refresh local files
+            presenterUI.askForPermission(any())
+            presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
         }
 
         Assert.assertEquals("Has writtenUri: ${io.writtenUri.joinToString(", ")}", 2, io.writtenUri.size)
@@ -97,6 +121,9 @@ class PresenterImplTest {
     @Test
     fun testDoesNotCrushOnNetworkError() {
         val mediaProvider = mockk<MediaProvider>()
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
         every { mediaProvider.blockingSearch(any()) } throws IOException("search network failure")
         every { mediaProvider.blockingTrending() } throws IOException("trending network failure")
 
@@ -106,6 +133,65 @@ class PresenterImplTest {
         verify {
             presenterUI.setItemsProviders(any())
             presenterUI.setItemsProviders(any())
+        }
+    }
+
+    @Test
+    fun testRefreshLocalGifsOnSettingUi() {
+        val mediaProvider = mockk<MediaProvider>()
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+
+        val capturingRequest = slot<PermissionRequest>()
+        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
+            capturingRequest.captured.onPermissionDenied()
+        }
+
+        val underTest = PresenterImpl(false, mediaProvider, io, UnconfinedDispatchersProvider())
+        clearMocks(mediaProvider)
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+        underTest.setPresenterUi(presenterUI)
+
+        verify(exactly = 0) { mediaProvider.blockingRecents() }
+        verify(exactly = 0) { mediaProvider.blockingSaved() }
+
+        clearMocks(mediaProvider)
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+
+        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
+            Shadows.shadowOf(ApplicationProvider.getApplicationContext() as Application)
+                .grantPermissions(*(capturingRequest.captured.permissions.toTypedArray()))
+            capturingRequest.captured.onPermissionGranted()
+        }
+        underTest.setPresenterUi(presenterUI)
+
+        verify {
+            mediaProvider.blockingRecents()
+            mediaProvider.blockingSaved()
+        }
+
+        clearMocks(mediaProvider)
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+        underTest.setPresenterUi(presenterUI)
+
+        verify {
+            mediaProvider.blockingRecents()
+            mediaProvider.blockingSaved()
         }
     }
 }

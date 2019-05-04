@@ -1,6 +1,7 @@
 package net.evendanan.lumiere.services
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Binder
 import androidx.annotation.VisibleForTesting
@@ -48,36 +49,20 @@ abstract class PresenterServiceBase : Service() {
     }
 }
 
-class DefaultPresenterService : PresenterServiceBase() {
-    override fun createPresenter() = PresenterImpl(
-        false,
-        GiphyMediaProvider(getString(R.string.giphy_api_key)),
-        IOAndroid(applicationContext),
+private fun createPresenter(pickerMode: Boolean, context: Context): PresenterImpl {
+    val io = IOAndroid(context)
+    return PresenterImpl(
+        pickerMode,
+        GiphyMediaProvider(context.getString(R.string.giphy_api_key), io.localStorageFolder, io.appStorageFolder),
+        io,
         AndroidDispatchersProvider
     )
+}
+
+class DefaultPresenterService : PresenterServiceBase() {
+    override fun createPresenter() = createPresenter(false, applicationContext)
 }
 
 class PickerPresenterService : PresenterServiceBase() {
-    override fun createPresenter() = PresenterImpl(
-        true,
-        GiphyMediaProvider(getString(R.string.giphy_api_key)),
-        IOAndroid(applicationContext),
-        AndroidDispatchersProvider
-    )
+    override fun createPresenter() = createPresenter(true, applicationContext)
 }
-/*
-override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    return super.onStartCommand(intent, flags, startId).also {
-        if (presenter == Presenter.NOOP) {
-            presenter = createPresenter(
-                intent?.extras?.containsKey(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_REQUEST_ID_KEY)
-                    ?: false,
-                GiphyMediaProvider(getString(R.string.giphy_api_key)),
-                IOAndroid(applicationContext)
-            )
-        }
-    }
-}
-
- */
-
