@@ -42,9 +42,16 @@ android {
         }
     }
 
+    def giphyApiKey = System.getenv().getOrDefault('GIPHY_API_KEY', 'no-key')
+    if (giphyApiKey == 'no-key') {
+        println("NOTICE: No API key was provided in environment variable GIPHY_API_KEY.")
+    } else if (!giphyApiKey.endsWith('6uoo')) {
+        println("NOTICE: API key was provided in environment variable GIPHY_API_KEY, but it does not end with '6uoo'!!!")
+    }
+
     buildTypes {
         release {
-            resValue("string", "giphy_api_key", System.getenv().getOrDefault('GIPHY_API_KEY', 'no-key'))
+            resValue("string", "giphy_api_key", giphyApiKey)
             signingConfig signingConfigs.release
             zipAlignEnabled true
             debuggable false
@@ -53,7 +60,7 @@ android {
         }
 
         debug {
-            resValue("string", "giphy_api_key", System.getenv().getOrDefault('GIPHY_API_KEY', 'no-key'))
+            resValue("string", "giphy_api_key", giphyApiKey)
         }
     }
 
