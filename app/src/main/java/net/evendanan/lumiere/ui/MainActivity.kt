@@ -29,29 +29,16 @@ import java.io.File
 open class MainActivity : AppCompatActivity() {
 
     private var runningPermissionsRequest: PermissionRequest? = null
-    private var presenter: Presenter = Presenter.NOOP
     private lateinit var transitionGlideFactory: TransitionFactory<Drawable>
     private lateinit var loadingPlaceholder: Drawable
     private lateinit var loadingError: Drawable
-    private val connectionToLumiere = object : ServiceConnection {
-        override fun onServiceConnected(
-            className: ComponentName,
-            service: IBinder
-        ) {
-            presenter = service as Presenter
-            presenter.setPresenterUi(UiPresenterBridge())
-        }
-
-        override fun onServiceDisconnected(name: ComponentName) {
-            presenter = Presenter.NOOP
-        }
-    }
+    private val connectionToLumiere = ConnectionToLumiere(UiPresenterBridge())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        fab.setOnClickListener { presenter.onSearchIconClicked() }
+        fab.setOnClickListener { connectionToLumiere.presenter.onSearchIconClicked() }
 
         transitionGlideFactory = DrawableCrossFadeFactory.Builder().setCrossFadeEnabled(true).build()
         loadingPlaceholder = createLoadingDrawable()
@@ -62,8 +49,8 @@ open class MainActivity : AppCompatActivity() {
                 this,
                 loadingPlaceholder,
                 loadingError,
-                { media, actionType -> presenter.onMediaActionClicked(media, actionType) },
-                { query, providerType -> presenter.onQuery(query, providerType) }
+                { media, actionType -> connectionToLumiere.presenter.onMediaActionClicked(media, actionType) },
+                { query, providerType -> connectionToLumiere.presenter.onQuery(query, providerType) }
             )
         root_list.layoutManager = LinearLayoutManager(this, RecyclerView.VERTICAL, false)
 
@@ -85,7 +72,7 @@ open class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        presenter.destroy()
+        connectionToLumiere.presenter.destroy()
         unbindService(connectionToLumiere)
     }
 
@@ -184,6 +171,23 @@ open class MainActivity : AppCompatActivity() {
         override fun setItemsProviders(providers: List<ItemsProvider>) {
             providers.forEach { Log.d("UiPresenterBridge", "provide: ${it.type}") }
             (root_list.adapter as SectionsAdapter).setItemsProviders(providers)
+        }
+    }
+
+    @VisibleForTesting
+    internal class ConnectionToLumiere(private val ui: PresenterUI) : ServiceConnection {
+        var presenter: Presenter = Presenter.NOOP
+
+        override fun onServiceConnected(
+            className: ComponentName,
+            service: IBinder
+        ) {
+            presenter = service as Presenter
+            presenter.setPresenterUi(ui)
+        }
+
+        override fun onServiceDisconnected(name: ComponentName) {
+            presenter = Presenter.NOOP
         }
     }
 }

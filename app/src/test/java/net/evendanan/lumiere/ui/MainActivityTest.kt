@@ -1,4 +1,4 @@
-package net.evendanan.lumiere
+package net.evendanan.lumiere.ui
 
 import android.app.Application
 import android.content.ComponentName
@@ -10,9 +10,11 @@ import io.mockk.Called
 import io.mockk.clearMocks
 import io.mockk.mockk
 import io.mockk.verify
+import net.evendanan.lumiere.Presenter
+import net.evendanan.lumiere.PresenterUI
+import net.evendanan.lumiere.R
 import net.evendanan.lumiere.services.DefaultPresenterService
 import net.evendanan.lumiere.services.PickerPresenterService
-import net.evendanan.lumiere.ui.MainActivity
 import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
@@ -61,7 +63,8 @@ class MainActivityTest {
 
     @Test
     fun pickerModeWhenStartedByAnySoftKeyboard() {
-        Robolectric.buildActivity(TestMainActivity::class.java,
+        Robolectric.buildActivity(
+            TestMainActivity::class.java,
             Intent(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_ACTION).apply {
                 putExtra(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_REQUEST_ID_KEY, 123)
                 putExtra(MediaInsertion.INTENT_MEDIA_INSERTION_REQUEST_MEDIA_MIMES_KEY, arrayOf("image/png"))
@@ -110,6 +113,23 @@ class MainActivityTest {
 
         activityController.destroy()
         verify { defaultPresenter.destroy() }
+    }
+
+    @Test
+    fun testServiceConnection() {
+        val presenterUI = mockk<PresenterUI>(relaxed = true)
+        val underTest = MainActivity.ConnectionToLumiere(presenterUI)
+
+        Assert.assertSame(Presenter.NOOP, underTest.presenter)
+
+        underTest.onServiceConnected(ComponentName("p", "c"), defaultPresenter)
+        verify { defaultPresenter.setPresenterUi(presenterUI) }
+        Assert.assertSame(defaultPresenter, underTest.presenter)
+
+        clearMocks(defaultPresenter)
+        underTest.onServiceDisconnected(ComponentName("p", "c"))
+        Assert.assertSame(Presenter.NOOP, underTest.presenter)
+        verify { defaultPresenter wasNot Called }
     }
 }
 

@@ -1,14 +1,9 @@
 package net.evendanan.lumiere.services
 
 import android.content.Intent
-import io.mockk.Called
-import io.mockk.mockk
-import io.mockk.slot
-import io.mockk.verify
-import net.evendanan.lumiere.ItemsProvider
-import net.evendanan.lumiere.Presenter
-import net.evendanan.lumiere.PresenterUI
-import net.evendanan.lumiere.ProviderType
+import android.net.Uri
+import io.mockk.*
+import net.evendanan.lumiere.*
 import org.junit.Assert
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,5 +61,29 @@ class PresenterServicesTest {
         val presenterUi = mockk<PresenterUI>(relaxed = true)
         localBinder.setPresenterUi(presenterUi)
         verify { service.presenter.setPresenterUi(presenterUi) }
+
+        clearMocks(service.presenter)
+        Media(
+            "title",
+            Uri.parse("http://ex.com"),
+            Uri.parse("http://ex.com"),
+            Uri.parse("http://ex.com"),
+            "filesname.gif"
+        ).run {
+            localBinder.onMediaActionClicked(this, ActionType.Save)
+            verify { service.presenter.onMediaActionClicked(this@run, ActionType.Save) }
+        }
+
+        clearMocks(service.presenter)
+        localBinder.onQuery("hello", ProviderType.Search)
+        verify { service.presenter.onQuery("hello", ProviderType.Search) }
+
+        clearMocks(service.presenter)
+        localBinder.onSearchIconClicked()
+        verify { service.presenter.onSearchIconClicked() }
+
+        clearMocks(service.presenter)
+        localBinder.destroy()
+        verify { service.presenter.setPresenterUi(PresenterUI.NOOP) }
     }
 }
