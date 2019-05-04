@@ -1,7 +1,6 @@
 <resources>
     <string name="app_name">Lumiere</string>
     <string name="action_settings">Settings</string>
-    <string name="giphy_api_key">nlpoOvleCgWUCfqCIGhHkZWpoand6uoo</string>
     <string name="loaded_image_content_description">loaded image</string>
     <string name="trending_list_title">Trending</string>
     <string name="favorites_list_title">Favorites</string>

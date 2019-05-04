@@ -44,11 +44,16 @@ android {
 
     buildTypes {
         release {
+            resValue("string", "giphy_api_key", System.getenv().getOrDefault('GIPHY_API_KEY', 'no-key'))
             signingConfig signingConfigs.release
             zipAlignEnabled true
             debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+
+        debug {
+            resValue("string", "giphy_api_key", System.getenv().getOrDefault('GIPHY_API_KEY', 'no-key'))
         }
     }
 
@@ -63,6 +68,11 @@ android {
                 }
             }
         }
+    }
+
+    compileOptions {
+        targetCompatibility = "8"
+        sourceCompatibility = "8"
     }
 }
 
@@ -131,6 +141,11 @@ dependencies {
     implementation 'pl.droidsonroids.gif:android-gif-drawable:1.2.16'
 
     implementation 'com.github.bumptech.glide:glide:4.9.0'
+    implementation ('com.github.bumptech.glide:okhttp3-integration:4.9.0') {
+        exclude group: 'glide-parent'
+    }
+    implementation 'com.squareup.okhttp3:okhttp:3.14.1'
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.9.0'
 
     implementation 'com.giphy.sdk:core:1.0.3@aar'
     //required for giphy

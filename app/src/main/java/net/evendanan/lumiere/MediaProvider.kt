@@ -1,22 +1,44 @@
 package net.evendanan.lumiere
 
 import android.net.Uri
+import androidx.core.net.toUri
 import com.giphy.sdk.core.models.enums.MediaType
 import com.giphy.sdk.core.network.api.CompletionHandler
 import com.giphy.sdk.core.network.api.GPHApiClient
 import com.giphy.sdk.core.network.response.ListMediaResponse
+import java.io.File
 import java.util.concurrent.CountDownLatch
 
 interface MediaProvider {
     fun blockingSearch(phrase: String): List<Media>
     fun blockingTrending(): List<Media>
+    fun blockingSaved(): List<Media>
+    fun blockingRecents(): List<Media>
+    fun blockingGallery(): List<Media>
+}
+
+abstract class LocalMediaProvider(private val savedFilesFolder: File, private val recentFilesFolder: File) :
+    MediaProvider {
+
+    private fun gifsFromFolder(rootFolder: File) = rootFolder
+        .listFiles { _, name -> name?.endsWith(".gif") ?: false }
+        ?.map { Media(it.nameWithoutExtension, it.toUri(), it.toUri(), it.toUri(), it.name) }
+        ?.toList() ?: emptyList()
+
+    override fun blockingSaved() = gifsFromFolder(savedFilesFolder)
+
+    override fun blockingRecents() = gifsFromFolder(recentFilesFolder)
+
+    override fun blockingGallery(): List<Media> = emptyList()
 }
 
 /**
  * Giphy implementation of {@see MediaProvider}.
  * Note that all methods are blocking!
  */
-class GiphyMediaProvider(apiKey: String) : MediaProvider {
+class GiphyMediaProvider(apiKey: String, savedFilesFolder: File, recentFilesFolder: File) :
+    LocalMediaProvider(savedFilesFolder, recentFilesFolder) {
+
     private val client = GPHApiClient(apiKey)
 
     override fun blockingTrending(): List<Media> {

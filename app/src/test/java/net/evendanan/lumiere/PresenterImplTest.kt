@@ -21,17 +21,24 @@ class PresenterImplTest {
     @Before
     fun setup() {
         presenterUI = mockk(relaxed = true)
+        val capturingRequest = slot<PermissionRequest>()
+        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
+            Shadows.shadowOf(ApplicationProvider.getApplicationContext() as Application)
+                .grantPermissions(*(capturingRequest.captured.permissions.toTypedArray()))
+            capturingRequest.captured.onPermissionGranted()
+        }
         io = FakeIO()
     }
 
     @Test
     fun testAsksForPermissionOnSaveActionAndNotSavingIfDenied() {
-        val underTest = PresenterImpl(false, FakeMediaProvider(), presenterUI, io, UnconfinedDispatchersProvider())
-
+        val underTest = PresenterImpl(false, FakeMediaProvider(), io, UnconfinedDispatchersProvider())
         val capturingRequest = slot<PermissionRequest>()
         every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
             capturingRequest.captured.onPermissionDenied()
         }
+
+        underTest.setPresenterUi(presenterUI)
 
         underTest.onMediaActionClicked(
             Media(
@@ -53,14 +60,9 @@ class PresenterImplTest {
 
     @Test
     fun testAsksForPermissionOnSaveActionAndSavingIfGranted() {
-        val underTest = PresenterImpl(false, FakeMediaProvider(), presenterUI, io, UnconfinedDispatchersProvider())
+        val underTest = PresenterImpl(false, FakeMediaProvider(), io, UnconfinedDispatchersProvider())
 
-        val capturingRequest = slot<PermissionRequest>()
-        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
-            Shadows.shadowOf(ApplicationProvider.getApplicationContext() as Application)
-                .grantPermissions(*(capturingRequest.captured.permissions.toTypedArray()))
-            capturingRequest.captured.onPermissionGranted()
-        }
+        underTest.setPresenterUi(presenterUI)
 
         underTest.onMediaActionClicked(
             Media(
@@ -73,11 +75,22 @@ class PresenterImplTest {
         )
 
         coVerifySequence {
+            //loading local files
+            presenterUI.askForPermission(any())
             presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
+            //load trending
+            presenterUI.setItemsProviders(any())
+            presenterUI.fabVisibility(any())
+            //user wants to save
             presenterUI.askForPermission(any())
             presenterUI.showProgress()
             presenterUI.notifyLocalMediaFile(io.writtenUri[1].toFile(), io.writtenUri[0])
             presenterUI.hideProgress()
+            //refresh local files
+            presenterUI.askForPermission(any())
+            presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
         }
 
         Assert.assertEquals("Has writtenUri: ${io.writtenUri.joinToString(", ")}", 2, io.writtenUri.size)
@@ -92,13 +105,102 @@ class PresenterImplTest {
     }
 
     @Test
-    fun testDoesNotCrushOnNetworkError() {
+    fun testDoesNotCrushOnNetworkErrorWithTrending() {
         val mediaProvider = mockk<MediaProvider>()
-        every { mediaProvider.blockingSearch(any()) } throws IOException("search network failure")
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
         every { mediaProvider.blockingTrending() } throws IOException("trending network failure")
 
-        val underTest = PresenterImpl(false, mediaProvider, presenterUI, io, UnconfinedDispatchersProvider())
+        val underTest = PresenterImpl(false, mediaProvider, io, UnconfinedDispatchersProvider())
+        underTest.setPresenterUi(presenterUI)
 
-        verify { presenterUI.setItemsProviders(any()) }
+        verify {
+            presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
+        }
+    }
+
+    @Test
+    fun testDoesNotCrushOnNetworkErrorWithSearch() {
+        val mediaProvider = mockk<MediaProvider>()
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } throws IOException("search network failure")
+        every { mediaProvider.blockingTrending() } returns emptyList()
+
+        val underTest = PresenterImpl(false, mediaProvider, io, UnconfinedDispatchersProvider())
+        underTest.setPresenterUi(presenterUI)
+
+        verify {
+            presenterUI.setItemsProviders(any())
+            presenterUI.setItemsProviders(any())
+        }
+
+        underTest.onSearchIconClicked()
+        verify(exactly = 0) { mediaProvider.blockingSearch(any()) }
+        underTest.onQuery("testing", ProviderType.Search)
+        verify { mediaProvider.blockingSearch("testing") }
+    }
+
+    @Test
+    fun testRefreshLocalGifsOnSettingUi() {
+        val mediaProvider = mockk<MediaProvider>()
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+
+        val capturingRequest = slot<PermissionRequest>()
+        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
+            capturingRequest.captured.onPermissionDenied()
+        }
+
+        val underTest = PresenterImpl(false, mediaProvider, io, UnconfinedDispatchersProvider())
+        clearMocks(mediaProvider)
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+        underTest.setPresenterUi(presenterUI)
+
+        verify(exactly = 0) { mediaProvider.blockingRecents() }
+        verify(exactly = 0) { mediaProvider.blockingSaved() }
+
+        clearMocks(mediaProvider)
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+
+        every { presenterUI.askForPermission(capture(capturingRequest)) } answers {
+            Shadows.shadowOf(ApplicationProvider.getApplicationContext() as Application)
+                .grantPermissions(*(capturingRequest.captured.permissions.toTypedArray()))
+            capturingRequest.captured.onPermissionGranted()
+        }
+        underTest.setPresenterUi(presenterUI)
+
+        verify {
+            mediaProvider.blockingRecents()
+            mediaProvider.blockingSaved()
+        }
+
+        clearMocks(mediaProvider)
+        every { mediaProvider.blockingSaved() } returns emptyList()
+        every { mediaProvider.blockingRecents() } returns emptyList()
+        every { mediaProvider.blockingGallery() } returns emptyList()
+        every { mediaProvider.blockingSearch(any()) } returns emptyList()
+        every { mediaProvider.blockingTrending() } returns emptyList()
+        underTest.setPresenterUi(presenterUI)
+
+        verify {
+            mediaProvider.blockingRecents()
+            mediaProvider.blockingSaved()
+        }
     }
 }
